@@ -15,6 +15,9 @@ class OAuthHandler: NSObject {
     // MARK: - Constants
 
     // Custom URL scheme for OAuth callbacks (doesn't need to be registered in Info.plist)
+    // NOTE: Custom URL schemes can be hijacked by malicious apps. For production use,
+    // consider using Universal Links (https://) which are more secure and cannot be intercepted.
+    // Universal Links require Associated Domains configuration in your app.
     static let oauthCallbackScheme = "connectsdk-oauth"
 
     // Expected callback host when using custom scheme
@@ -65,17 +68,32 @@ class OAuthHandler: NSObject {
     /// Initiates OAuth authentication flow using ASWebAuthenticationSession
     /// - Parameters:
     ///   - url: The OAuth authorization URL
-    ///   - callbackURLPrefix: The HTTPS callback URL prefix to intercept (e.g., "https://yourdomain.com/oauth")
+    ///   - callbackURLPrefix: Optional HTTPS callback URL prefix for Universal Links (e.g., "https://yourdomain.com/oauth").
+    ///                        If nil, uses the default custom URL scheme (less secure, but no server config required).
+    ///                        Universal Links are recommended for production as they cannot be hijacked by other apps.
     ///   - presentingViewController: The view controller to present the authentication session from
+    ///   - prefersEphemeralSession: Whether to use an ephemeral browser session. Defaults to true for security.
+    ///                              Set to false to enable SSO with Safari cookies (less secure on shared devices).
     ///   - completion: Called when authentication completes with parameters or error
     func authenticate(
         url: String,
         callbackURLPrefix: String? = nil,
         from presentingViewController: UIViewController,
+        prefersEphemeralSession: Bool = true,
         completion: @escaping OAuthCompletion
     ) {
-        // Use custom scheme for OAuth callbacks
-        let callbackScheme = Self.oauthCallbackScheme
+        // Determine callback scheme - prefer Universal Links if provided
+        let callbackScheme: String
+
+        if let callbackPrefix = callbackURLPrefix,
+           let url = URL(string: callbackPrefix),
+           url.scheme == "https" {
+            // Use Universal Link (more secure)
+            callbackScheme = "https"
+        } else {
+            // Fallback to custom URL scheme
+            callbackScheme = Self.oauthCallbackScheme
+        }
         guard let authURL = URL(string: url) else {
             completion(.failure(OAuthError.invalidURL))
             return
@@ -98,8 +116,10 @@ class OAuthHandler: NSObject {
         // Configure session for iOS 13+
         if #available(iOS 13.0, *) {
             authSession?.presentationContextProvider = self
-            // Allow SSO with Safari cookies
-            authSession?.prefersEphemeralWebBrowserSession = false
+            // Configure ephemeral session preference (defaults to true for security)
+            // When true: Session cookies don't persist, no SSO with Safari (more secure)
+            // When false: Enables SSO with Safari cookies (convenience vs security tradeoff)
+            authSession?.prefersEphemeralWebBrowserSession = prefersEphemeralSession
         }
 
         // Start the authentication session
@@ -142,7 +162,6 @@ class OAuthHandler: NSObject {
         let isValidCallback = validateCallbackURL(callbackURL)
 
         if !isValidCallback {
-            let errorMessage = "Received unexpected callback URL: \(callbackURL.absoluteString). Expected: \(Self.oauthCallbackScheme)://\(Self.expectedCallbackHost)"
             completion?(.failure(OAuthError.invalidCallbackURL(callbackURL.absoluteString)))
             return
         }
@@ -158,13 +177,24 @@ class OAuthHandler: NSObject {
     }
 
     private func validateCallbackURL(_ url: URL) -> Bool {
-        // Check if the URL matches our expected custom scheme callback
-        let schemeMatches = url.scheme == Self.oauthCallbackScheme
-        let hostMatches = url.host == Self.expectedCallbackHost
+        // Support both custom URL schemes and Universal Links (HTTPS)
+        if url.scheme == "https" {
+            // For Universal Links, validate against known trusted domains
+            // This provides better security as Universal Links cannot be hijacked
+            let trustedDomains = ["connect.xyz", "zerohash.com"]
+            if let host = url.host {
+                return trustedDomains.contains(where: { host.hasSuffix($0) })
+            }
+            return false
+        } else if url.scheme == Self.oauthCallbackScheme {
+            // For custom URL scheme, validate scheme and host
+            // Note: Custom URL schemes can potentially be hijacked by malicious apps
+            let hostMatches = url.host == Self.expectedCallbackHost
+            return hostMatches
+        }
 
-        // For custom scheme, we only validate scheme and host
-        // Path is not significant for custom scheme URLs
-        return schemeMatches && hostMatches
+        // Reject any other schemes
+        return false
     }
 
     private func parseOAuthParameters(from url: URL) -> [String: String] {

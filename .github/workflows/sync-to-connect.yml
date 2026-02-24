@@ -1,0 +1,71 @@
+name: Sync to connect/connect-ios
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.repository != 'connect-by-zerohash/connect-ios'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout connect-ios
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config --global user.email "security@zerohash.com"
+          git config --global user.name "zerohash"
+
+      - name: Add connect/connect-ios remote
+        run: |
+          # Remove the credential helper that actions/checkout
+          # sets up, so the PAT in the remote URL is used
+          git config --unset-all http.https://github.com/.extraheader || true
+          git remote add destination "https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/connect-by-zerohash/connect-ios.git"
+          git fetch destination main:destination-main
+
+      - name: Get latest synced commit
+        id: latest
+        run: |
+          LATEST=$(git merge-base destination/main destination-main)
+          echo "commit=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest synced commit: $LATEST"
+
+      - name: Check for new commits
+        id: check
+        run: |
+          NEW_COMMITS=$(git rev-list ${{ steps.latest.outputs.commit }}..HEAD | wc -l)
+          echo "count=$NEW_COMMITS" >> $GITHUB_OUTPUT
+          if [ "$NEW_COMMITS" -gt 0 ]; then
+            echo "Found $NEW_COMMITS new commits"
+          else
+            echo "No new commits to sync"
+          fi
+
+      - name: Get next commit number
+        if: steps.check.outputs.count > 0
+        id: number
+        run: |
+          COMMIT_COUNT=$(git rev-list --count destination-main)
+          NEXT_NUM=$((COMMIT_COUNT + 1))
+          echo "next=$NEXT_NUM" >> $GITHUB_OUTPUT
+          echo "Next commit number: $NEXT_NUM"
+
+      - name: Create squashed commit
+        if: steps.check.outputs.count > 0
+        run: |
+          git checkout destination-main
+          git merge --squash HEAD@{1} --allow-unrelated-histories --strategy-option=theirs
+          git commit --author="zerohash <security@zerohash.com>" -m "Commit ${{ steps.number.outputs.next }}"
+
+      - name: Push to destination
+        if: steps.check.outputs.count > 0
+        run: |
+          git push destination HEAD:main

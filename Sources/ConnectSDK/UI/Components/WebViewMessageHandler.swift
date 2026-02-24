@@ -29,6 +29,9 @@ class WebViewMessageHandler: NSObject {
     private let theme: String
     private let environment: Environment
 
+    // Allowlist of trusted origins for JavaScript messages
+    private let allowedOrigins = ["sdk.connect.xyz"]
+
     // MARK: - Initialization
 
     init(webView: WKWebView, jwt: String, theme: String, environment: Environment) {
@@ -49,9 +52,29 @@ class WebViewMessageHandler: NSObject {
         guard let webView = webView else { return }
 
         do {
-            let jsonData = try JSONSerialization.data(withJSONObject: data)
-            let jsonString = String(data: jsonData, encoding: .utf8)!
-            let script = "window.postMessage({ type: '\(type)', data: \(jsonString) });"
+            // Validate type parameter to prevent JavaScript injection
+            // Only allow alphanumeric characters and hyphens
+            let allowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-"))
+            guard type.unicodeScalars.allSatisfy({ allowedCharacters.contains($0) }) else {
+                print("Error: Invalid message type contains disallowed characters: \(type)")
+                return
+            }
+
+            // Create complete message object and serialize it all at once
+            // This avoids string interpolation and potential injection
+            let message: [String: Any] = [
+                "type": type,
+                "data": data
+            ]
+
+            let jsonData = try JSONSerialization.data(withJSONObject: message)
+            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+                print("Error: Failed to encode message as UTF-8")
+                return
+            }
+
+            // Use template without string interpolation for the message content
+            let script = "window.postMessage(\(jsonString));"
             webView.evaluateJavaScript(
                 script,
                 completionHandler: { (result, error) in
@@ -88,6 +111,15 @@ extension WebViewMessageHandler: WKScriptMessageHandler {
     func userContentController(
         _ userContentController: WKUserContentController, didReceive message: WKScriptMessage
     ) {
+        // Validate the origin of the message
+        let host = message.frameInfo.securityOrigin.host
+
+        // Check if the host is in the allowlist
+        guard allowedOrigins.contains(host) else {
+            print("Message rejected from unauthorized origin: \(host)")
+            return
+        }
+
         guard let jsonString = message.body as? String else {
             print("Unexpected message type:", type(of: message.body))
             return

@@ -17,6 +17,9 @@ class SubViewController: UIViewController, WKNavigationDelegate {
     private let theme: Theme
     private let activityIndicator = UIActivityIndicatorView(style: .large)
 
+    // Allowlist of trusted domains that can be loaded in SubViewController
+    private let allowedDomains = ["connect.xyz", "zerohash.com"]
+
     // MARK: - Initialization
 
     init(urlString: String, theme: Theme = .system) {
@@ -131,9 +134,30 @@ class SubViewController: UIViewController, WKNavigationDelegate {
 
     private func loadWebsite() {
         guard let url = URL(string: urlString) else {
+            showError("Invalid URL")
             return
         }
+
+        // Validate that the URL's host is in the allowlist
+        guard let host = url.host,
+              allowedDomains.contains(where: { host.hasSuffix($0) }) else {
+            showError("URL not allowed. Only trusted domains can be loaded.")
+            return
+        }
+
         let request = URLRequest(url: url)
         webView.load(request)
+    }
+
+    private func showError(_ message: String) {
+        let alert = UIAlertController(
+            title: "Error",
+            message: message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
+            self?.navigationController?.popViewController(animated: true)
+        })
+        present(alert, animated: true)
     }
 }
