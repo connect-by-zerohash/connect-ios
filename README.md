@@ -11,7 +11,7 @@ A Swift SDK for seamless integration with the [Connect](https://docs.zerohash.co
 - **Secure OAuth2/OIDC Authentication** - Industry-standard authentication flow via embedded WebView
 - **Theme Support** - Light, dark, and system theme options to match your app's design
 - **iOS 13+ Support** - Compatible with iOS 13 and later versions
-- **Real-time Event Callbacks** - Comprehensive event handling the deposit flow
+- **Real-time Event Callbacks** - Comprehensive event handling for the deposit flow
 - **Multiple Environments** - Support for both sandbox and production environments
 - **Type-Safe** - Full Swift type safety with comprehensive error handling
 
