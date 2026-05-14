@@ -27,6 +27,26 @@ struct ConnectSDKTypesTests {
         #expect(app.baseURL.contains(app.identifier))
     }
 
+    @Test("ConnectApp recovery identifier") func testConnectAppRecoveryIdentifier() {
+        let app = ConnectApp.recovery
+        #expect(app.identifier == "recovery")
+    }
+
+    @Test("ConnectApp recovery base URL") func testConnectAppRecoveryBaseURL() {
+        let app = ConnectApp.recovery
+        #expect(app.baseURL == "https://sdk.connect.xyz/mobile/#recovery")
+    }
+
+    @Test("ConnectApp withdrawal identifier") func testConnectAppWithdrawalIdentifier() {
+        let app = ConnectApp.withdrawal
+        #expect(app.identifier == "withdraw")
+    }
+
+    @Test("ConnectApp withdrawal base URL") func testConnectAppWithdrawalBaseURL() {
+        let app = ConnectApp.withdrawal
+        #expect(app.baseURL == "https://sdk.connect.xyz/mobile/#withdraw")
+    }
+
     // MARK: - Theme Tests
 
     @Test("Theme light raw value") func testThemeLightRawValue() {

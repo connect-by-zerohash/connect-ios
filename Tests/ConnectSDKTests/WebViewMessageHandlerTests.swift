@@ -95,6 +95,29 @@ struct WebViewMessageHandlerDataTests {
             }
         }
     }
+
+    @Test("withdrawal event message contains withdrawal ID") func testWithdrawalEventMessage_ContainsWithdrawalId() {
+        let message = MockData.withdrawalEventMessage(withdrawalId: "wit-456")
+
+        if let data = message["data"] as? [String: Any] {
+            #expect(data["withdrawalId"] as? String == "wit-456")
+        }
+    }
+
+    @Test("withdrawal event message has correct type") func testWithdrawalEventMessage_HasCorrectType() {
+        let message = MockData.withdrawalEventMessage()
+        #expect(message["type"] as? String == "withdrawal")
+    }
+
+    @Test("withdrawal event message contains status") func testWithdrawalEventMessage_ContainsStatus() {
+        let message = MockData.withdrawalEventMessage(status: "processed")
+
+        if let data = message["data"] as? [String: Any] {
+            if let status = data["status"] as? [String: Any] {
+                #expect(status["value"] as? String == "processed")
+            }
+        }
+    }
 }
 
 struct WebViewMessageHandlerJSONTests {

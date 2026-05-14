@@ -260,6 +260,10 @@ class WebViewController: UIViewController, WKNavigationDelegate,
         }
     }
 
+    func messageHandler(_ handler: WebViewMessageHandler, didReceiveWithdrawal data: [String: Any], jsonString: String) {
+        callbackHandler.handleWithdrawalEvent(data, jsonString: jsonString)
+    }
+
     // MARK: - WebViewLoadingManagerDelegate
 
     func loadingManagerDidRequestRetry(_ manager: WebViewLoadingManager) {

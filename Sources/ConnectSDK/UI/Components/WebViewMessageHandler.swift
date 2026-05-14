@@ -17,6 +17,7 @@ protocol WebViewMessageHandlerDelegate: AnyObject {
     func messageHandler(_ handler: WebViewMessageHandler, didReceiveError data: [String: Any], jsonString: String)
     func messageHandler(_ handler: WebViewMessageHandler, didReceiveEvent data: [String: Any], jsonString: String)
     func messageHandler(_ handler: WebViewMessageHandler, didReceiveDeposit data: [String: Any], jsonString: String)
+    func messageHandler(_ handler: WebViewMessageHandler, didReceiveWithdrawal data: [String: Any], jsonString: String)
 }
 
 class WebViewMessageHandler: NSObject {
@@ -181,6 +182,11 @@ extension WebViewMessageHandler: WKScriptMessageHandler {
         case "deposit":
             if let data = jsonObject["data"] as? [String: Any] {
                 delegate?.messageHandler(self, didReceiveDeposit: data, jsonString: jsonString)
+            }
+
+        case "withdrawal":
+            if let data = jsonObject["data"] as? [String: Any] {
+                delegate?.messageHandler(self, didReceiveWithdrawal: data, jsonString: jsonString)
             }
 
         default:

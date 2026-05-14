@@ -101,6 +101,7 @@ class WebViewMessageHandlerDelegateSpy: WebViewMessageHandlerDelegate {
     private(set) var errorInvocations: [(data: [String: Any], jsonString: String)] = []
     private(set) var eventInvocations: [(data: [String: Any], jsonString: String)] = []
     private(set) var depositInvocations: [(data: [String: Any], jsonString: String)] = []
+    private(set) var withdrawalInvocations: [(data: [String: Any], jsonString: String)] = []
 
     func messageHandlerDidReceivePageReady(_ handler: WebViewMessageHandler) {
         pageReadyCalls += 1
@@ -128,6 +129,10 @@ class WebViewMessageHandlerDelegateSpy: WebViewMessageHandlerDelegate {
 
     func messageHandler(_ handler: WebViewMessageHandler, didReceiveDeposit data: [String: Any], jsonString: String) {
         depositInvocations.append((data: data, jsonString: jsonString))
+    }
+
+    func messageHandler(_ handler: WebViewMessageHandler, didReceiveWithdrawal data: [String: Any], jsonString: String) {
+        withdrawalInvocations.append((data: data, jsonString: jsonString))
     }
 }
 

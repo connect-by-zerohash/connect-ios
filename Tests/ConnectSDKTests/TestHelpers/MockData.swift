@@ -93,6 +93,43 @@ enum MockData {
         return DepositEvent(data: [:], jsonString: "{}", timestamp: Date())
     }
 
+    // MARK: - WithdrawalEvent Fixtures
+
+    static func withdrawalEvent(
+        withdrawalId: String = "withdrawal-123",
+        status: String = "processed",
+        assetId: String = "BTC",
+        networkId: String = "bitcoin",
+        amount: String = "0.5",
+        jsonString: String = "{}",
+        timestamp: Date = Date()
+    ) -> WithdrawalEvent {
+        let data: [String: Any] = [
+            "withdrawalId": withdrawalId,
+            "status": ["value": status],
+            "assetId": assetId,
+            "networkId": networkId,
+            "amount": amount
+        ]
+        return WithdrawalEvent(
+            data: data,
+            jsonString: jsonString,
+            timestamp: timestamp
+        )
+    }
+
+    static var successfulWithdrawal: WithdrawalEvent {
+        return withdrawalEvent(status: "processed")
+    }
+
+    static var pendingWithdrawal: WithdrawalEvent {
+        return withdrawalEvent(status: "pending")
+    }
+
+    static var emptyWithdrawalEvent: WithdrawalEvent {
+        return WithdrawalEvent(data: [:], jsonString: "{}", timestamp: Date())
+    }
+
     // MARK: - ConnectSession Fixtures
 
     static func connectSession(app: ConnectApp = .auth) -> ConnectSession {
@@ -101,6 +138,14 @@ enum MockData {
 
     static var authSession: ConnectSession {
         return connectSession(app: .auth)
+    }
+
+    static var recoverySession: ConnectSession {
+        return connectSession(app: .recovery)
+    }
+
+    static var withdrawalSession: ConnectSession {
+        return connectSession(app: .withdrawal)
     }
 
     // MARK: - AuthCallbacks Fixtures
@@ -121,6 +166,46 @@ enum MockData {
 
     static var emptyCallbacks: AuthCallbacks {
         return authCallbacks()
+    }
+
+    // MARK: - RecoveryCallbacks Fixtures
+
+    static func recoveryCallbacks(
+        onClose: (() -> Void)? = nil,
+        onError: ((ErrorEvent) -> Void)? = nil,
+        onEvent: ((GenericEvent) -> Void)? = nil,
+        onWithdrawal: ((WithdrawalEvent) -> Void)? = nil
+    ) -> RecoveryCallbacks {
+        return RecoveryCallbacks(
+            onClose: onClose,
+            onError: onError,
+            onEvent: onEvent,
+            onWithdrawal: onWithdrawal
+        )
+    }
+
+    static var emptyRecoveryCallbacks: RecoveryCallbacks {
+        return recoveryCallbacks()
+    }
+
+    // MARK: - WithdrawalCallbacks Fixtures
+
+    static func withdrawalCallbacks(
+        onClose: (() -> Void)? = nil,
+        onError: ((ErrorEvent) -> Void)? = nil,
+        onEvent: ((GenericEvent) -> Void)? = nil,
+        onWithdrawal: ((WithdrawalEvent) -> Void)? = nil
+    ) -> WithdrawalCallbacks {
+        return WithdrawalCallbacks(
+            onClose: onClose,
+            onError: onError,
+            onEvent: onEvent,
+            onWithdrawal: onWithdrawal
+        )
+    }
+
+    static var emptyWithdrawalCallbacks: WithdrawalCallbacks {
+        return withdrawalCallbacks()
     }
 
     // MARK: - Raw Data Fixtures
@@ -201,6 +286,19 @@ enum MockData {
                 "assetId": "BTC",
                 "networkId": "bitcoin",
                 "amount": "1.5"
+            ]
+        )
+    }
+
+    static func withdrawalEventMessage(withdrawalId: String = "wit-123", status: String = "processed") -> [String: Any] {
+        return webViewMessage(
+            type: "withdrawal",
+            data: [
+                "withdrawalId": withdrawalId,
+                "status": ["value": status],
+                "assetId": "BTC",
+                "networkId": "bitcoin",
+                "amount": "0.5"
             ]
         )
     }

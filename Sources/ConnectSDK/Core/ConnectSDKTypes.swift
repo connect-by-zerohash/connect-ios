@@ -13,11 +13,15 @@ import UIKit
 /// Available Connect apps that can be launched
 public enum ConnectApp {
     case auth
+    case recovery
+    case withdrawal
 
     /// The identifier used in the URL
     var identifier: String {
         switch self {
         case .auth: return "auth"
+        case .recovery: return "recovery"
+        case .withdrawal: return "withdraw"
         }
     }
 
@@ -164,4 +168,9 @@ internal protocol CallbackHandler {
     func handleErrorEvent(_ errorData: [String: Any], jsonString: String)
     func handleGenericEvent(_ eventData: [String: Any], jsonString: String)
     func handleDepositEvent(_ depositData: [String: Any], jsonString: String)
+    func handleWithdrawalEvent(_ withdrawalData: [String: Any], jsonString: String)
+}
+
+internal extension CallbackHandler {
+    func handleWithdrawalEvent(_ withdrawalData: [String: Any], jsonString: String) {}
 }
