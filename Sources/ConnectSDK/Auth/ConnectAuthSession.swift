@@ -25,6 +25,12 @@ public class ConnectAuthSession {
     /// Callbacks for auth events
     private let callbacks: AuthCallbacks
 
+    /// Hosts permitted for navigation and resource loads
+    private let allowList: ConnectAllowList
+
+    /// Universal Link callback used by the OAuth flow
+    private let oauthCallback: ConnectOAuthCallback
+
     /// Whether the session has been presented
     private var isPresented: Bool = false
 
@@ -34,11 +40,13 @@ public class ConnectAuthSession {
     // MARK: - Initialization
 
     /// Creates a new auth session configuration
-    internal init(jwt: String, environment: Environment, theme: Theme, callbacks: AuthCallbacks) {
+    internal init(jwt: String, environment: Environment, theme: Theme, callbacks: AuthCallbacks, allowList: ConnectAllowList = .default, oauthCallback: ConnectOAuthCallback = .default) {
         self.jwt = jwt
         self.environment = environment
         self.theme = theme
         self.callbacks = callbacks
+        self.allowList = allowList
+        self.oauthCallback = oauthCallback
     }
 
     // MARK: - Public Methods
@@ -54,7 +62,7 @@ public class ConnectAuthSession {
 
         // Validate JWT has basic structure (header.payload.signature)
         guard !jwt.isEmpty else {
-            print("ConnectSDK Error: JWT token is empty")
+            Log.error("JWT token is empty")
             return nil
         }
 
@@ -63,11 +71,13 @@ public class ConnectAuthSession {
 
         // Create the web view controller
         let webVC = WebViewController(
-            urlString: ConnectApp.auth.baseURL,
+            urlString: ConnectApp.auth.baseURL(for: environment),
             jwt: jwt,
             environment: environment,
             theme: theme.rawValue,
-            callbackHandler: callbackHandler
+            callbackHandler: callbackHandler,
+            allowList: allowList,
+            oauthCallback: oauthCallback
         )
 
         // Create navigation controller

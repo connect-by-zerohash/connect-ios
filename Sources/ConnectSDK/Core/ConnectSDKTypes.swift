@@ -25,9 +25,10 @@ public enum ConnectApp {
         }
     }
 
-    /// Base URL for the web app
-    var baseURL: String {
-        return "https://sdk.connect.xyz/mobile/#\(identifier)"
+    /// Base URL for the web app. Sandbox traffic is routed to
+    /// `sdk.sandbox.connect.xyz`; production traffic to `sdk.connect.xyz`.
+    func baseURL(for environment: Environment) -> String {
+        return "https://\(environment.webHost)/mobile/#\(identifier)"
     }
 }
 
@@ -46,6 +47,16 @@ public enum Theme: String {
 public enum Environment: String {
     case sandbox = "sandbox"
     case production = "production"
+
+    /// Host of the embedded Connect web app for this environment. Single
+    /// source of truth shared by `ConnectApp.baseURL(for:)` and the
+    /// WebView's trusted-origin check.
+    internal var webHost: String {
+        switch self {
+        case .sandbox:    return "sdk.sandbox.connect.xyz"
+        case .production: return "sdk.connect.xyz"
+        }
+    }
 }
 
 // MARK: - Session

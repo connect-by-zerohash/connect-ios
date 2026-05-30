@@ -15,16 +15,15 @@ class SubViewController: UIViewController, WKNavigationDelegate {
     private var webView: WKWebView!
     private let urlString: String
     private let theme: Theme
+    private let allowList: ConnectAllowList
     private let activityIndicator = UIActivityIndicatorView(style: .large)
-
-    // Allowlist of trusted domains that can be loaded in SubViewController
-    private let allowedDomains = ["connect.xyz", "zerohash.com"]
 
     // MARK: - Initialization
 
-    init(urlString: String, theme: Theme = .system) {
+    init(urlString: String, theme: Theme = .system, allowList: ConnectAllowList = .default) {
         self.urlString = urlString
         self.theme = theme
+        self.allowList = allowList
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -80,6 +79,19 @@ class SubViewController: UIViewController, WKNavigationDelegate {
         // Optionally, show an error alert to the user
     }
 
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let host = navigationAction.request.url?.host,
+              allowList.contains(host: host) else {
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
     // MARK: - Theme Configuration
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -112,6 +124,7 @@ class SubViewController: UIViewController, WKNavigationDelegate {
 
     private func setupWebView() {
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
         webView = WKWebView(frame: .zero, configuration: config)
 
         webView.navigationDelegate = self
@@ -139,14 +152,19 @@ class SubViewController: UIViewController, WKNavigationDelegate {
         }
 
         // Validate that the URL's host is in the allowlist
-        guard let host = url.host,
-              allowedDomains.contains(where: { host.hasSuffix($0) }) else {
+        guard let host = url.host, allowList.contains(host: host) else {
             showError("URL not allowed. Only trusted domains can be loaded.")
             return
         }
 
         let request = URLRequest(url: url)
-        webView.load(request)
+        ContentRuleList.compile(for: allowList) { [weak self] ruleList in
+            guard let self = self else { return }
+            if let ruleList = ruleList {
+                self.webView.configuration.userContentController.add(ruleList)
+            }
+            self.webView.load(request)
+        }
     }
 
     private func showError(_ message: String) {

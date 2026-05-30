@@ -20,6 +20,13 @@ class WebViewOAuthManager {
 
     weak var delegate: WebViewOAuthManagerDelegate?
     private var oauthHandler: OAuthHandler?
+    private let callback: ConnectOAuthCallback
+
+    // MARK: - Initialization
+
+    init(callback: ConnectOAuthCallback = .default) {
+        self.callback = callback
+    }
 
     // MARK: - Public Methods
 
@@ -33,12 +40,12 @@ class WebViewOAuthManager {
     
     private func openInExternalBrowser(url: String) {
         guard let url = URL(string: url) else {
-            print("Invalid URL: \(url)")
+            Log.error("Invalid URL: \(url)")
             return
         }
 
         guard UIApplication.shared.canOpenURL(url) else {
-            print("Cannot open URL: \(url)")
+            Log.error("Cannot open URL: \(url)")
             return
         }
 
@@ -53,14 +60,14 @@ class WebViewOAuthManager {
 
         oauthHandler?.authenticate(
             url: url,
-            callbackURLPrefix: nil,
+            callback: callback,
             from: viewController
         ) { [weak self] result in
             guard let self = self else { return }
 
             switch result {
             case .success(let parameters):
-                if let connectionId = parameters["connectionId"] as? String {
+                if let connectionId = parameters["connectionId"] {
                     self.delegate?.oauthManager(self, didCompleteWithConnectionId: connectionId)
                 } else {
                     self.delegate?.oauthManager(self, didFailWithError: "Error processing the data.")

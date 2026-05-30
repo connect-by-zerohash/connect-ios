@@ -19,6 +19,8 @@ class WebViewController: UIViewController, WKNavigationDelegate,
     private var theme: String
     private var themeEnum: Theme
     private var isInitialLoad = true
+    private let allowList: ConnectAllowList
+    private let oauthCallback: ConnectOAuthCallback
 
     // Managers
     private var loadingManager: WebViewLoadingManager!
@@ -30,13 +32,15 @@ class WebViewController: UIViewController, WKNavigationDelegate,
     internal weak var session: ConnectSession?
 
     // Initializer with callback handler
-    init(urlString: String, jwt: String, environment: Environment, theme: String, callbackHandler: CallbackHandler) {
+    init(urlString: String, jwt: String, environment: Environment, theme: String, callbackHandler: CallbackHandler, allowList: ConnectAllowList = .default, oauthCallback: ConnectOAuthCallback = .default) {
         self.urlString = urlString
         self.jwt = jwt
         self.environment = environment
         self.theme = theme
         self.themeEnum = Theme(rawValue: theme) ?? .system
         self.callbackHandler = callbackHandler
+        self.allowList = allowList
+        self.oauthCallback = oauthCallback
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -147,6 +151,7 @@ class WebViewController: UIViewController, WKNavigationDelegate,
         let config = WKWebViewConfiguration()
         config.userContentController = contentController
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        config.websiteDataStore = .nonPersistent()
 
         webView = WKWebView(frame: view.bounds, configuration: config)
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -192,14 +197,20 @@ class WebViewController: UIViewController, WKNavigationDelegate,
     }
 
     private func setupOAuthManager() {
-        oauthManager = WebViewOAuthManager()
+        oauthManager = WebViewOAuthManager(callback: oauthCallback)
         oauthManager.delegate = self
     }
 
 
     private func loadWebsite() {
         guard let url = URL(string: urlString) else { return }
-        webView.load(URLRequest(url: url))
+        ContentRuleList.compile(for: allowList) { [weak self] ruleList in
+            guard let self = self else { return }
+            if let ruleList = ruleList {
+                self.webView.configuration.userContentController.add(ruleList)
+            }
+            self.webView.load(URLRequest(url: url))
+        }
     }
 
     private func transitionToWebView() {
@@ -227,7 +238,7 @@ class WebViewController: UIViewController, WKNavigationDelegate,
             // Show navigation bar before pushing the new view controller.
             // This allows back button to be visible and web page title.
             self.navigationController?.setNavigationBarHidden(false, animated: true)
-            let newWebViewController = SubViewController(urlString: url, theme: themeEnum)
+            let newWebViewController = SubViewController(urlString: url, theme: themeEnum, allowList: allowList)
             self.navigationController?.pushViewController(newWebViewController, animated: true)
         } else if mobileTarget == "oauth" {
             // Open in external browser for any other value or if not specified

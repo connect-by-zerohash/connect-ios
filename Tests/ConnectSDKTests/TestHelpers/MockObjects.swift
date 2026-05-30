@@ -207,11 +207,12 @@ actor AnimationCapture {
 // MARK: - Result Builders for URLs
 
 extension URL {
-    /// Create OAuth callback URL with query parameters
+    /// Create OAuth callback URL with query parameters (matches ConnectOAuthCallback.default)
     static func oauthCallback(code: String = "auth_code_123", state: String = "state_xyz") -> URL {
         var components = URLComponents()
-        components.scheme = "connectsdk-oauth"
-        components.host = "callback"
+        components.scheme = "https"
+        components.host = ConnectOAuthCallback.default.host
+        components.path = ConnectOAuthCallback.default.path
         components.queryItems = [
             URLQueryItem(name: "code", value: code),
             URLQueryItem(name: "state", value: state)
@@ -219,18 +220,19 @@ extension URL {
         return components.url ?? URL(fileURLWithPath: "/")
     }
 
-    /// Create OAuth callback URL with fragment parameters
+    /// Create OAuth callback URL with fragment parameters (matches ConnectOAuthCallback.default)
     static func oauthCallbackWithFragment(accessToken: String = "access_token_123", tokenType: String = "Bearer") -> URL {
         var components = URLComponents()
-        components.scheme = "connectsdk-oauth"
-        components.host = "callback"
+        components.scheme = "https"
+        components.host = ConnectOAuthCallback.default.host
+        components.path = ConnectOAuthCallback.default.path
         components.fragment = "access_token=\(accessToken)&token_type=\(tokenType)"
         return components.url ?? URL(fileURLWithPath: "/")
     }
 
-    /// Create invalid OAuth callback URL
+    /// Create invalid OAuth callback URL (wrong host)
     static func invalidOauthCallback() -> URL {
-        return URL(string: "https://example.com/callback?code=123") ?? URL(fileURLWithPath: "/")
+        return URL(string: "https://example.com/oauth-callback?code=123") ?? URL(fileURLWithPath: "/")
     }
 }
 

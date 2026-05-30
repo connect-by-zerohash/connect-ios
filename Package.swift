@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "ConnectSDK",
     platforms: [
-        .iOS(.v13)
+        .iOS("17.4")
     ],
     products: [
         .library(
@@ -15,7 +15,8 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "ConnectSDK"),
+            name: "ConnectSDK",
+            resources: [.copy("PrivacyInfo.xcprivacy")]),
         .testTarget(
             name: "ConnectSDKTests",
             dependencies: ["ConnectSDK"]

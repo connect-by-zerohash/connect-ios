@@ -99,6 +99,7 @@ struct ConnectWithdrawalSessionTests {
 
     @Test("withdrawal app uses correct URL identifier") func testWithdrawalApp_URL() {
         #expect(ConnectApp.withdrawal.identifier == "withdraw")
-        #expect(ConnectApp.withdrawal.baseURL == "https://sdk.connect.xyz/mobile/#withdraw")
+        #expect(ConnectApp.withdrawal.baseURL(for: .production) == "https://sdk.connect.xyz/mobile/#withdraw")
+        #expect(ConnectApp.withdrawal.baseURL(for: .sandbox) == "https://sdk.sandbox.connect.xyz/mobile/#withdraw")
     }
 }

@@ -17,16 +17,20 @@ public class ConnectWithdrawalSession {
     private let environment: Environment
     private let theme: Theme
     private let callbacks: WithdrawalCallbacks
+    private let allowList: ConnectAllowList
+    private let oauthCallback: ConnectOAuthCallback
     private var isPresented: Bool = false
     private var activeSession: ConnectSession?
 
     // MARK: - Initialization
 
-    internal init(jwt: String, environment: Environment, theme: Theme, callbacks: WithdrawalCallbacks) {
+    internal init(jwt: String, environment: Environment, theme: Theme, callbacks: WithdrawalCallbacks, allowList: ConnectAllowList = .default, oauthCallback: ConnectOAuthCallback = .default) {
         self.jwt = jwt
         self.environment = environment
         self.theme = theme
         self.callbacks = callbacks
+        self.allowList = allowList
+        self.oauthCallback = oauthCallback
     }
 
     // MARK: - Public Methods
@@ -41,18 +45,20 @@ public class ConnectWithdrawalSession {
         }
 
         guard !jwt.isEmpty else {
-            print("ConnectSDK Error: JWT token is empty")
+            Log.error("JWT token is empty")
             return nil
         }
 
         let callbackHandler = WithdrawalCallbackHandler(callbacks: callbacks)
 
         let webVC = WebViewController(
-            urlString: ConnectApp.withdrawal.baseURL,
+            urlString: ConnectApp.withdrawal.baseURL(for: environment),
             jwt: jwt,
             environment: environment,
             theme: theme.rawValue,
-            callbackHandler: callbackHandler
+            callbackHandler: callbackHandler,
+            allowList: allowList,
+            oauthCallback: oauthCallback
         )
 
         let nav = UINavigationController(rootViewController: webVC)

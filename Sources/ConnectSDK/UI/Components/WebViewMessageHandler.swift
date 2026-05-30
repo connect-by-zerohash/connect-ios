@@ -30,9 +30,6 @@ class WebViewMessageHandler: NSObject {
     private let theme: String
     private let environment: Environment
 
-    // Allowlist of trusted origins for JavaScript messages
-    private let allowedOrigins = ["sdk.connect.xyz"]
-
     // MARK: - Initialization
 
     init(webView: WKWebView, jwt: String, theme: String, environment: Environment) {
@@ -57,7 +54,7 @@ class WebViewMessageHandler: NSObject {
             // Only allow alphanumeric characters and hyphens
             let allowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-"))
             guard type.unicodeScalars.allSatisfy({ allowedCharacters.contains($0) }) else {
-                print("Error: Invalid message type contains disallowed characters: \(type)")
+                Log.error("Invalid message type contains disallowed characters: \(type)")
                 return
             }
 
@@ -70,7 +67,7 @@ class WebViewMessageHandler: NSObject {
 
             let jsonData = try JSONSerialization.data(withJSONObject: message)
             guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                print("Error: Failed to encode message as UTF-8")
+                Log.error("Failed to encode message as UTF-8")
                 return
             }
 
@@ -80,11 +77,11 @@ class WebViewMessageHandler: NSObject {
                 script,
                 completionHandler: { (result, error) in
                     if let error = error {
-                        print("Error sending message to WebView:", error.localizedDescription)
+                        Log.error("Error sending message to WebView: \(error.localizedDescription)")
                     }
                 })
         } catch {
-            print("Error serializing JSON: \(error)")
+            Log.error("Error serializing JSON: \(error)")
         }
     }
 
@@ -116,13 +113,13 @@ extension WebViewMessageHandler: WKScriptMessageHandler {
         let host = message.frameInfo.securityOrigin.host
 
         // Check if the host is in the allowlist
-        guard allowedOrigins.contains(host) else {
-            print("Message rejected from unauthorized origin: \(host)")
+        guard host == environment.webHost else {
+            Log.error("Message rejected from unauthorized origin: \(host)")
             return
         }
 
         guard let jsonString = message.body as? String else {
-            print("Unexpected message type:", type(of: message.body))
+            Log.debug("Unexpected message body type: \(type(of: message.body))")
             return
         }
 
@@ -131,12 +128,12 @@ extension WebViewMessageHandler: WKScriptMessageHandler {
                 let jsonObject = try JSONSerialization.jsonObject(
                     with: Data(jsonString.utf8), options: []) as? [String: Any]
             else {
-                print("Failed to convert JSON string to a JSON object")
+                Log.debug("Failed to convert JSON string to a JSON object")
                 return
             }
 
             guard let messageType = jsonObject["type"] as? String else {
-                print("Missing 'type' key in JSON object")
+                Log.debug("Missing 'type' key in JSON object")
                 return
             }
 
@@ -145,7 +142,7 @@ extension WebViewMessageHandler: WKScriptMessageHandler {
             }
 
         } catch {
-            print("Error parsing JSON:", error.localizedDescription)
+            Log.error("Error parsing JSON: \(error.localizedDescription)")
         }
     }
 
@@ -190,7 +187,7 @@ extension WebViewMessageHandler: WKScriptMessageHandler {
             }
 
         default:
-            print("Unknown message type:", type)
+            Log.debug("Unknown message type: \(type)")
         }
     }
 }

@@ -17,14 +17,19 @@ struct ConnectSDKTypesTests {
         #expect(app.identifier == "auth")
     }
 
-    @Test("ConnectApp auth base URL") func testConnectAppAuthBaseURL() {
+    @Test("ConnectApp auth production base URL") func testConnectAppAuthBaseURL_Production() {
         let app = ConnectApp.auth
-        #expect(app.baseURL == "https://sdk.connect.xyz/mobile/#auth")
+        #expect(app.baseURL(for: .production) == "https://sdk.connect.xyz/mobile/#auth")
+    }
+
+    @Test("ConnectApp auth sandbox base URL") func testConnectAppAuthBaseURL_Sandbox() {
+        let app = ConnectApp.auth
+        #expect(app.baseURL(for: .sandbox) == "https://sdk.sandbox.connect.xyz/mobile/#auth")
     }
 
     @Test("ConnectApp auth URL contains identifier") func testConnectAppAuthBaseURLContainsIdentifier() {
         let app = ConnectApp.auth
-        #expect(app.baseURL.contains(app.identifier))
+        #expect(app.baseURL(for: .production).contains(app.identifier))
     }
 
     @Test("ConnectApp recovery identifier") func testConnectAppRecoveryIdentifier() {
@@ -32,9 +37,14 @@ struct ConnectSDKTypesTests {
         #expect(app.identifier == "recovery")
     }
 
-    @Test("ConnectApp recovery base URL") func testConnectAppRecoveryBaseURL() {
+    @Test("ConnectApp recovery production base URL") func testConnectAppRecoveryBaseURL_Production() {
         let app = ConnectApp.recovery
-        #expect(app.baseURL == "https://sdk.connect.xyz/mobile/#recovery")
+        #expect(app.baseURL(for: .production) == "https://sdk.connect.xyz/mobile/#recovery")
+    }
+
+    @Test("ConnectApp recovery sandbox base URL") func testConnectAppRecoveryBaseURL_Sandbox() {
+        let app = ConnectApp.recovery
+        #expect(app.baseURL(for: .sandbox) == "https://sdk.sandbox.connect.xyz/mobile/#recovery")
     }
 
     @Test("ConnectApp withdrawal identifier") func testConnectAppWithdrawalIdentifier() {
@@ -42,9 +52,14 @@ struct ConnectSDKTypesTests {
         #expect(app.identifier == "withdraw")
     }
 
-    @Test("ConnectApp withdrawal base URL") func testConnectAppWithdrawalBaseURL() {
+    @Test("ConnectApp withdrawal production base URL") func testConnectAppWithdrawalBaseURL_Production() {
         let app = ConnectApp.withdrawal
-        #expect(app.baseURL == "https://sdk.connect.xyz/mobile/#withdraw")
+        #expect(app.baseURL(for: .production) == "https://sdk.connect.xyz/mobile/#withdraw")
+    }
+
+    @Test("ConnectApp withdrawal sandbox base URL") func testConnectAppWithdrawalBaseURL_Sandbox() {
+        let app = ConnectApp.withdrawal
+        #expect(app.baseURL(for: .sandbox) == "https://sdk.sandbox.connect.xyz/mobile/#withdraw")
     }
 
     // MARK: - Theme Tests
@@ -75,6 +90,14 @@ struct ConnectSDKTypesTests {
     @Test("Environment sandbox raw value") func testEnvironmentSandboxRawValue() {
         let env = Environment.sandbox
         #expect(env.rawValue == "sandbox")
+    }
+
+    @Test("Environment sandbox web host") func testEnvironmentSandboxWebHost() {
+        #expect(Environment.sandbox.webHost == "sdk.sandbox.connect.xyz")
+    }
+
+    @Test("Environment production web host") func testEnvironmentProductionWebHost() {
+        #expect(Environment.production.webHost == "sdk.connect.xyz")
     }
 
     @Test("Environment production raw value") func testEnvironmentProductionRawValue() {

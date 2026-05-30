@@ -99,6 +99,7 @@ struct ConnectRecoverySessionTests {
 
     @Test("recovery app uses correct URL identifier") func testRecoveryApp_URL() {
         #expect(ConnectApp.recovery.identifier == "recovery")
-        #expect(ConnectApp.recovery.baseURL == "https://sdk.connect.xyz/mobile/#recovery")
+        #expect(ConnectApp.recovery.baseURL(for: .production) == "https://sdk.connect.xyz/mobile/#recovery")
+        #expect(ConnectApp.recovery.baseURL(for: .sandbox) == "https://sdk.sandbox.connect.xyz/mobile/#recovery")
     }
 }
