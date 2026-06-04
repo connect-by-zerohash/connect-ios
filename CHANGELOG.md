@@ -5,6 +5,26 @@ All notable changes to ConnectSDK for iOS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] – 2026-06-04
+
+### Fixed
+
+- The WebView host allow-list now fails closed when it can't be compiled.
+  Before, if `WKContentRuleListStore` was unavailable or the rules failed
+  to compile, `ContentRuleList.compile` returned `nil` silently and the
+  WebView loaded with no allow-list, so XHR-style requests could reach any
+  host. The SDK now logs the failure in every build and calls
+  `assertionFailure` in debug builds so a regression is caught during
+  development. The load is refused either way.
+- Fixed the default allow-list never compiling. WebKit's content-rule regex
+  engine rejects an end-of-string anchor inside an alternation group
+  (`([/:?#]|$)` fails with `WKErrorDomain` error 6), so the rules silently
+  failed to compile and the WebView fell back to loading with no
+  restrictions. Each host now emits two rules per scheme, one ending in
+  `[/:?#]` and one ending in `$`, which keeps the "delimiter or end of
+  string" boundary that rejects look-alike hosts such as
+  `connect.xyz.evil.com`.
+
 ## [1.0.0] – 2026-05-31
 
 First stable release. This is a **major** version that addresses every item
