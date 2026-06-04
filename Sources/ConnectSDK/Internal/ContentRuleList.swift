@@ -18,6 +18,7 @@ internal enum ContentRuleList {
         completion: @escaping @MainActor (WKContentRuleList?) -> Void
     ) {
         guard let store = WKContentRuleListStore.default() else {
+            reportCompileFailure("content rule list store unavailable")
             completion(nil)
             return
         }
@@ -26,10 +27,71 @@ internal enum ContentRuleList {
         store.compileContentRuleList(
             forIdentifier: identifier,
             encodedContentRuleList: encoded
-        ) { list, _ in
-            Task { @MainActor in completion(list) }
+        ) { list, error in
+            Task { @MainActor in
+                if list == nil {
+                    reportCompileFailure("content rule list compile failed: \(error?.localizedDescription ?? "unknown error")")
+                }
+                completion(list)
+            }
         }
     }
+
+    /// Called when no allow-list could be produced, either because the store
+    /// was unavailable or the rules failed to compile. `compile` returns `nil`
+    /// here, and callers fail closed: they refuse the load instead of showing a
+    /// WebView with no host restrictions. The log line runs in every build,
+    /// since that is the only signal we get from a shipped app. Debug builds
+    /// also hit `assertionFailure` so a regression surfaces during development.
+    @MainActor
+    private static func reportCompileFailure(_ reason: String) {
+        #if DEBUG
+        // Test seam: when set, unit tests can exercise the fail-closed path
+        // without the `assertionFailure` below crashing the test process.
+        // Never set outside tests.
+        if let reporter = failureReporterOverride {
+            reporter(reason)
+            return
+        }
+        #endif
+        Log.error("ContentRuleList could not be compiled: \(reason). The load will be refused (fail closed).")
+        assertionFailure("ContentRuleList could not be compiled: \(reason)")
+    }
+
+    #if DEBUG
+    /// Test-only override for `reportCompileFailure`. When set, a test can run
+    /// the fail-closed path without `assertionFailure` killing the test process,
+    /// and check that the failure was reported. Leave it nil outside tests.
+    @MainActor
+    internal static var failureReporterOverride: ((String) -> Void)?
+
+    /// Test-only entry point that compiles a caller-supplied encoded rule
+    /// string and skips `encodedRules`. Feeding it deliberately invalid JSON
+    /// makes the real `WKContentRuleListStore` fail to compile, which runs the
+    /// fail-closed path against WebKit itself rather than a mock.
+    @MainActor
+    internal static func compileForTesting(
+        encoded: String,
+        completion: @escaping @MainActor (WKContentRuleList?) -> Void
+    ) {
+        guard let store = WKContentRuleListStore.default() else {
+            reportCompileFailure("content rule list store unavailable")
+            completion(nil)
+            return
+        }
+        store.compileContentRuleList(
+            forIdentifier: identifier(for: encoded),
+            encodedContentRuleList: encoded
+        ) { list, error in
+            Task { @MainActor in
+                if list == nil {
+                    reportCompileFailure("content rule list compile failed: \(error?.localizedDescription ?? "unknown error")")
+                }
+                completion(list)
+            }
+        }
+    }
+    #endif
 
     private static func identifier(for encoded: String) -> String {
         let digest = SHA256.hash(data: Data(encoded.utf8))
@@ -37,7 +99,8 @@ internal enum ContentRuleList {
         return "ConnectSDKAllowlist-\(hex.prefix(16))"
     }
 
-    private static func encodedRules(for hosts: [String]) -> String {
+    internal static func encodedRules(for hosts: [String]) -> String {
+        // Block everything first, then re-allow each configured host.
         var rules: [[String: Any]] = [
             [
                 "trigger": ["url-filter": ".*"],
@@ -47,11 +110,21 @@ internal enum ContentRuleList {
         for host in hosts {
             let escaped = NSRegularExpression.escapedPattern(for: host)
             for scheme in ["https?", "wss?"] {
-                let pattern = "^\(scheme)://([^/]+\\.)?\(escaped)([/:?#]|$)"
-                rules.append([
-                    "trigger": ["url-filter": pattern],
-                    "action": ["type": "ignore-previous-rules"],
-                ])
+                // The host has to be followed by a path/port/query/fragment
+                // delimiter, or be the end of the string. That is what rejects
+                // look-alike hosts such as `connect.xyz.evil.com`.
+                //
+                // WebKit's content-rule regex engine won't accept an
+                // end-of-string anchor inside an alternation group: `([/:?#]|$)`
+                // fails to compile with WKErrorDomain error 6. So we emit two
+                // separate rules per scheme instead of one alternation.
+                let prefix = "^\(scheme)://([^/]+\\.)?\(escaped)"
+                for suffix in ["[/:?#]", "$"] {
+                    rules.append([
+                        "trigger": ["url-filter": "\(prefix)\(suffix)"],
+                        "action": ["type": "ignore-previous-rules"],
+                    ])
+                }
             }
         }
         let data = (try? JSONSerialization.data(withJSONObject: rules)) ?? Data("[]".utf8)
