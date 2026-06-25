@@ -9,7 +9,7 @@ import UIKit
 import WebKit
 
 class WebViewController: UIViewController, WKNavigationDelegate,
-    WKUIDelegate, WebViewLoadingManagerDelegate, WebViewMessageHandlerDelegate, WebViewOAuthManagerDelegate
+    WKUIDelegate, WebViewLoadingManagerDelegate, UIWebViewMessageRouterDelegate, WebViewOAuthManagerDelegate
 {
 
     private var webView: WKWebView!
@@ -24,8 +24,14 @@ class WebViewController: UIViewController, WKNavigationDelegate,
 
     // Managers
     private var loadingManager: WebViewLoadingManager!
-    private var messageHandler: WebViewMessageHandler!
     private var oauthManager: WebViewOAuthManager!
+
+    // Unified bridge wiring
+    private lazy var sharedConfig = SharedWebViewConfiguration()
+    private var nativeIOSHandler: NativeIOSMessageHandler!
+    private var uiWebViewRouter: UIWebViewMessageRouter!
+    private var automationWebViewRouter: AutomationWebViewMessageRouter!
+    private var replySink: PostMessageReplySink!
 
     // Properties for typed callbacks
     internal var callbackHandler: CallbackHandler
@@ -146,12 +152,13 @@ class WebViewController: UIViewController, WKNavigationDelegate,
 
 
     private func setupWebView() {
-        let contentController = WKUserContentController()
-
         let config = WKWebViewConfiguration()
-        config.userContentController = contentController
+        config.processPool = sharedConfig.processPool
+        // Use the shared persistent data store (not `.nonPersistent()`) so the
+        // Coinbase login session/cookies are reused across the offscreen
+        // `auth.status` runner and the modal login flow.
+        config.websiteDataStore = sharedConfig.dataStore
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
-        config.websiteDataStore = .nonPersistent()
 
         webView = WKWebView(frame: view.bounds, configuration: config)
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -159,13 +166,64 @@ class WebViewController: UIViewController, WKNavigationDelegate,
         webView.uiDelegate = self
         webView.navigationDelegate = self
 
-        // Setup message handler
-        messageHandler = WebViewMessageHandler(webView: webView, jwt: jwt, theme: theme, environment: environment)
-        messageHandler.delegate = self
-        messageHandler.setupMessageHandlers()
+        // Build the unified bridge.
+        let originHost = URL(string: urlString)?.host ?? "sdk.connect.xyz"
+        let allowed: Set<String> = [originHost]
 
-        // Set WebView background to match theme
+        replySink = PostMessageReplySink(webView: webView)
+
+        let initialJWT = self.jwt
+        let initialEnv = self.environment
+        let initialTheme = self.theme
+
+        uiWebViewRouter = UIWebViewMessageRouter(
+            initialMessages: { [
+                ("jwt",    ["token": initialJWT, "env": initialEnv.rawValue]),
+                ("config", ["theme": initialTheme]),
+            ] },
+            send: { [weak self] msg in
+                // `msg` is `[String: Any]` shaped `{type, data}`. Forward to the sink
+                // by extracting the canonical fields.
+                guard let self = self,
+                      let type = msg["type"] as? String,
+                      let data = msg["data"] as? [String: Any] else { return }
+                self.replySink.sendUIWebViewMessage(type: type, data: data)
+            }
+        )
+        uiWebViewRouter.delegate = self
+
+        automationWebViewRouter = AutomationWebViewMessageRouter(
+            registry: PlatformRegistry.shared,
+            sink: replySink,
+            executionContextFactory: { [weak self] requestId in
+                guard let self = self else {
+                    fatalError("ExecutionContext factory invoked without owning controller")
+                }
+                return ExecutionContextImpl(
+                    host: self,
+                    shared: self.sharedConfig,
+                    currentRequestId: requestId,
+                    eventEmitter: self.automationWebViewRouter
+                )
+            }
+        )
+
+        nativeIOSHandler = NativeIOSMessageHandler(
+            uiWebView: uiWebViewRouter,
+            automationWebView: automationWebViewRouter,
+            allowedOrigins: allowed
+        )
+
+        // Register exactly one message-handler channel on the live config.
+        webView.configuration.userContentController.add(nativeIOSHandler, name: "NativeIOS")
+
+        // WebView styling (unchanged from previous implementation).
         webView.isOpaque = false
+
+        #if DEBUG
+        if #available(iOS 16.4, *) { webView.isInspectable = true }
+        #endif
+
         if themeEnum.shouldUseDarkMode(in: traitCollection) {
             webView.backgroundColor = Theme.darkBackgroundColor
             webView.scrollView.backgroundColor = Theme.darkBackgroundColor
@@ -173,8 +231,6 @@ class WebViewController: UIViewController, WKNavigationDelegate,
             webView.backgroundColor = .systemBackground
             webView.scrollView.backgroundColor = .systemBackground
         }
-
-        // Initially hide WebView until page is ready
         webView.alpha = 0.0
         webView.isUserInteractionEnabled = false
 
@@ -204,7 +260,16 @@ class WebViewController: UIViewController, WKNavigationDelegate,
 
     private func loadWebsite() {
         guard let url = URL(string: urlString) else { return }
-        ContentRuleList.compile(for: allowList) { [weak self] ruleList in
+        // For `.localDev`, the LAN dev-server host is not part of the default
+        // allow-list. Add it so the ContentRuleList does not block the local
+        // shell. Sandbox/production keep the integrator-supplied allow-list.
+        let effectiveAllowList: ConnectAllowList = {
+            if case .localDev(let devURL) = environment, let host = devURL.host {
+                return ConnectAllowList(hosts: allowList.hosts + [host])
+            }
+            return allowList
+        }()
+        ContentRuleList.compile(for: effectiveAllowList) { [weak self] ruleList in
             guard let self = self else { return }
             if let ruleList = ruleList {
                 self.webView.configuration.userContentController.add(ruleList)
@@ -221,57 +286,48 @@ class WebViewController: UIViewController, WKNavigationDelegate,
         oauthManager.handleExternalNavigation(url: url, from: self, isOauth: isOauth)
     }
 
-    // MARK: - WebViewMessageHandlerDelegate
+    // MARK: - UIWebViewMessageRouterDelegate
 
-    func messageHandlerDidReceivePageReady(_ handler: WebViewMessageHandler) {
-        // Page ready is handled internally by the message handler
-    }
-
-    func messageHandlerDidReceiveContentReady(_ handler: WebViewMessageHandler) {
+    func uiWebViewRouterDidReceiveContentReady(_ router: UIWebViewMessageRouter) {
         transitionToWebView()
     }
 
-    func messageHandler(_ handler: WebViewMessageHandler, didReceiveNavigate url: String, mobileTarget: String?) {
-        // Determine navigation behavior based on mobileTarget
+    func uiWebViewRouter(_ router: UIWebViewMessageRouter, didReceiveNavigate url: String, mobileTarget: String?) {
         if mobileTarget == "in_app" {
-            // Open in SubViewController (in-app browser)
-            // Show navigation bar before pushing the new view controller.
-            // This allows back button to be visible and web page title.
             self.navigationController?.setNavigationBarHidden(false, animated: true)
             let newWebViewController = SubViewController(urlString: url, theme: themeEnum, allowList: allowList)
             self.navigationController?.pushViewController(newWebViewController, animated: true)
         } else if mobileTarget == "oauth" {
-            // Open in external browser for any other value or if not specified
             self.handleExternalNavigation(url: url, isOauth: true)
         } else {
             self.handleExternalNavigation(url: url, isOauth: false)
         }
     }
 
-    func messageHandlerDidReceiveClose(_ handler: WebViewMessageHandler) {
+    func uiWebViewRouterDidReceiveClose(_ router: UIWebViewMessageRouter) {
         callbackHandler.handleClose()
         dismiss(animated: true)
     }
 
-    func messageHandler(_ handler: WebViewMessageHandler, didReceiveError data: [String: Any], jsonString: String) {
+    func uiWebViewRouter(_ router: UIWebViewMessageRouter, didReceiveError data: [String: Any], jsonString: String) {
         if let handler = callbackHandler as? AuthCallbackHandler {
             handler.handleErrorEvent(data, jsonString: jsonString)
         }
     }
 
-    func messageHandler(_ handler: WebViewMessageHandler, didReceiveEvent data: [String: Any], jsonString: String) {
+    func uiWebViewRouter(_ router: UIWebViewMessageRouter, didReceiveEvent data: [String: Any], jsonString: String) {
         if let handler = callbackHandler as? AuthCallbackHandler {
             handler.handleGenericEvent(data, jsonString: jsonString)
         }
     }
 
-    func messageHandler(_ handler: WebViewMessageHandler, didReceiveDeposit data: [String: Any], jsonString: String) {
+    func uiWebViewRouter(_ router: UIWebViewMessageRouter, didReceiveDeposit data: [String: Any], jsonString: String) {
         if let handler = callbackHandler as? AuthCallbackHandler {
             handler.handleDepositEvent(data, jsonString: jsonString)
         }
     }
 
-    func messageHandler(_ handler: WebViewMessageHandler, didReceiveWithdrawal data: [String: Any], jsonString: String) {
+    func uiWebViewRouter(_ router: UIWebViewMessageRouter, didReceiveWithdrawal data: [String: Any], jsonString: String) {
         callbackHandler.handleWithdrawalEvent(data, jsonString: jsonString)
     }
 
@@ -291,10 +347,10 @@ class WebViewController: UIViewController, WKNavigationDelegate,
     // MARK: - WebViewOAuthManagerDelegate
 
     func oauthManager(_ manager: WebViewOAuthManager, didCompleteWithConnectionId connectionId: String) {
-        messageHandler.sendOAuthResult(success: true, connectionId: connectionId)
+        replySink.sendOAuthResult(success: true, connectionId: connectionId)
     }
 
     func oauthManager(_ manager: WebViewOAuthManager, didFailWithError error: String) {
-        messageHandler.sendOAuthResult(success: false, error: error)
+        replySink.sendOAuthResult(success: false, error: error)
     }
 }

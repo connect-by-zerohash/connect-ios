@@ -44,7 +44,7 @@ internal enum ContentRuleList {
     /// since that is the only signal we get from a shipped app. Debug builds
     /// also hit `assertionFailure` so a regression surfaces during development.
     @MainActor
-    private static func reportCompileFailure(_ reason: String) {
+    static func reportCompileFailure(_ reason: String) {
         #if DEBUG
         // Test seam: when set, unit tests can exercise the fail-closed path
         // without the `assertionFailure` below crashing the test process.
@@ -64,36 +64,9 @@ internal enum ContentRuleList {
     /// and check that the failure was reported. Leave it nil outside tests.
     @MainActor
     internal static var failureReporterOverride: ((String) -> Void)?
-
-    /// Test-only entry point that compiles a caller-supplied encoded rule
-    /// string and skips `encodedRules`. Feeding it deliberately invalid JSON
-    /// makes the real `WKContentRuleListStore` fail to compile, which runs the
-    /// fail-closed path against WebKit itself rather than a mock.
-    @MainActor
-    internal static func compileForTesting(
-        encoded: String,
-        completion: @escaping @MainActor (WKContentRuleList?) -> Void
-    ) {
-        guard let store = WKContentRuleListStore.default() else {
-            reportCompileFailure("content rule list store unavailable")
-            completion(nil)
-            return
-        }
-        store.compileContentRuleList(
-            forIdentifier: identifier(for: encoded),
-            encodedContentRuleList: encoded
-        ) { list, error in
-            Task { @MainActor in
-                if list == nil {
-                    reportCompileFailure("content rule list compile failed: \(error?.localizedDescription ?? "unknown error")")
-                }
-                completion(list)
-            }
-        }
-    }
     #endif
 
-    private static func identifier(for encoded: String) -> String {
+    static func identifier(for encoded: String) -> String {
         let digest = SHA256.hash(data: Data(encoded.utf8))
         let hex = digest.map { String(format: "%02x", $0) }.joined()
         return "ConnectSDKAllowlist-\(hex.prefix(16))"

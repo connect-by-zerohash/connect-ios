@@ -1,4 +1,5 @@
 import UIKit
+import WebKit
 
 public class ConnectSDK {
 
@@ -69,4 +70,10 @@ public class ConnectSDK {
     ) -> ConnectWithdrawalSession {
         return ConnectWithdrawalSession(jwt: jwt, environment: environment, theme: theme, callbacks: callbacks, allowList: allowList, oauthCallback: oauthCallback)
     }
+}
+
+// MARK: - SDK Version
+
+extension ConnectSDK {
+    public static let version: String = "0.1.0"
 }

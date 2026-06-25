@@ -25,10 +25,18 @@ public enum ConnectApp {
         }
     }
 
-    /// Base URL for the web app. Sandbox traffic is routed to
-    /// `sdk.sandbox.connect.xyz`; production traffic to `sdk.connect.xyz`.
+    /// Base URL for the web app, resolved against the given environment.
+    /// For `.localDev`, returns the local dev-server URL directly so the SDK
+    /// shell can point at a LAN dev server. For `.sandbox`/`.production`,
+    /// returns the hosted URL (`environment.webHost`) with the app identifier
+    /// as a fragment.
     func baseURL(for environment: Environment) -> String {
-        return "https://\(environment.webHost)/mobile/#\(identifier)"
+        switch environment {
+        case .localDev(let url):
+            return url.absoluteString
+        case .sandbox, .production:
+            return "https://\(environment.webHost)/mobile/#\(identifier)"
+        }
     }
 }
 
@@ -44,17 +52,36 @@ public enum Theme: String {
 // MARK: - Environment
 
 /// Environment options for the SDK
-public enum Environment: String {
-    case sandbox = "sandbox"
-    case production = "production"
+public enum Environment: Equatable {
+    case sandbox
+    case production
+    case localDev(URL)
+
+    public var rawValue: String {
+        switch self {
+        case .sandbox:    return "sandbox"
+        case .production: return "production"
+        case .localDev:   return "localDev"
+        }
+    }
+
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "sandbox":    self = .sandbox
+        case "production": self = .production
+        default:           return nil
+        }
+    }
 
     /// Host of the embedded Connect web app for this environment. Single
     /// source of truth shared by `ConnectApp.baseURL(for:)` and the
-    /// WebView's trusted-origin check.
+    /// WebView's trusted-origin check. For `.localDev`, this is the host of
+    /// the configured local dev-server URL.
     internal var webHost: String {
         switch self {
-        case .sandbox:    return "sdk.sandbox.connect.xyz"
-        case .production: return "sdk.connect.xyz"
+        case .sandbox:           return "sdk.sandbox.connect.xyz"
+        case .production:        return "sdk.connect.xyz"
+        case .localDev(let url): return url.host ?? ""
         }
     }
 }

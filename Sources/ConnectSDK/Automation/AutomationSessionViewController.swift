@@ -1,0 +1,214 @@
+import Foundation
+import UIKit
+import WebKit
+
+/// A long-lived, automation-driven WebView session presented full-screen with NO
+/// chrome (the user can't act on it). Unlike `ModalViewController` (the user-driven
+/// `auth.login` modal) and `AutomatedWebViewController` (single-shot), this one
+/// stays alive across multiple bridge calls so a multi-step flow (withdraw) can
+/// drive the same page, hide it behind a branded overlay, and step aside / resume
+/// to let the host app collect an OTP mid-flow.
+///
+/// Conforms to `AutomationSessionHandle`; the coordinator retains it across
+/// `start` → `continue…` → terminal and dismisses it when the session ends.
+@MainActor
+final class AutomationSessionViewController:
+    UIViewController,
+    AutomationSessionHandle,
+    WKNavigationDelegate
+{
+    private let initialURL: URL
+    private let webViewConfig: WKWebViewConfiguration
+    private let timeoutMs: Int
+    private let overlayOptions: OverlayOptions
+    private let showOverlay: Bool
+    /// Only created/added when `showOverlay` is true.
+    private var overlay: LoadingOverlayView?
+    private var webView: WKWebView!
+    private var didDismiss = false
+    private var timeoutTask: Task<Void, Never>?
+
+    /// True once the first `didFinish` has fired (initial page load complete).
+    private var didLoad = false
+    /// Continuations awaiting `awaitInitialLoad()` while the page is still loading.
+    private var loadWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// The presenter (host VC) — set at presentation. Needed so the session can
+    /// re-present itself in `resume()` after `stepAside()` (the per-request
+    /// ExecutionContext is gone by the time `continue` resumes).
+    weak var presenter: UIViewController?
+
+    var currentURL: URL? { webView?.url }
+
+    init(url: URL,
+         sharedConfig: WKWebViewConfiguration,
+         timeoutMs: Int = 300_000,
+         overlay: OverlayOptions = .default,
+         showOverlay: Bool = false) {
+        self.initialURL = url
+        self.webViewConfig = sharedConfig
+        self.timeoutMs = timeoutMs
+        self.overlayOptions = overlay
+        self.showOverlay = showOverlay
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .fullScreen
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .systemBackground
+
+        webView = WKWebView(frame: view.bounds, configuration: webViewConfig)
+        #if DEBUG
+        if #available(iOS 16.4, *) { webView.isInspectable = true }
+        #endif
+        webView.navigationDelegate = self
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(webView)
+        // Full-bleed (no chrome — the user must not be able to act on this page).
+        NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        // Opaque branded overlay ON TOP of the WebView (added last so it covers the
+        // page) while the automation drives Coinbase. Lifted via revealOverlay.
+        if showOverlay {
+            let overlay = LoadingOverlayView(options: overlayOptions)
+            view.addSubview(overlay)
+            overlay.pinToSuperview()
+            overlay.start()
+            self.overlay = overlay
+        }
+
+        webView.load(URLRequest(url: initialURL))
+        scheduleTimeout()
+    }
+
+    /// Force-closes the session with teardown if it neither completes nor is
+    /// dismissed within the configured ceiling. Paused while parked on user input.
+    private func scheduleTimeout() {
+        let ms = timeoutMs
+        timeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.dismissSession()
+        }
+    }
+
+    /// Awaits Promise-returning automation via `callAsyncJavaScript`. `js` is (or
+    /// ends with) an expression; we wrap it as `return (expr);` (parens defeat
+    /// ASI). A thrown JS error's `WKJavaScriptExceptionMessage` is rethrown as a
+    /// `JSException` so messages survive to the platform layer.
+    func evaluateAsync(_ js: String, arguments: [String: Any]) async throws -> Any? {
+        loadViewIfNeeded()
+        var expr = js
+        while let last = expr.unicodeScalars.last,
+              last == ";" || CharacterSet.whitespacesAndNewlines.contains(last) {
+            expr.removeLast()
+        }
+        let wrapped = "return (\n\(expr)\n);"
+        do {
+            // `arguments` are bound as JS variables by WebKit (marshaled from native
+            // values), so request data reaches the script without being interpolated
+            // into its source.
+            return try await webView.callAsyncJavaScript(
+                wrapped, arguments: arguments, in: nil, contentWorld: .page)
+        } catch {
+            let nsErr = error as NSError
+            if let jsMessage = nsErr.userInfo["WKJavaScriptExceptionMessage"] as? String,
+               !jsMessage.isEmpty {
+                throw JSException(message: jsMessage)
+            }
+            throw error
+        }
+    }
+
+    func awaitInitialLoad() async {
+        // Ensure the view is loaded so the URL load has started, then wait for the
+        // first didFinish (or for teardown, which resumes waiters too).
+        loadViewIfNeeded()
+        if didLoad { return }
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            loadWaiters.append(cont)
+        }
+    }
+
+    /// Lift (true) or restore (false) the branded overlay. No-op when none exists.
+    func revealOverlay(_ revealed: Bool) {
+        overlay?.isHidden = revealed
+    }
+
+    /// Dismiss the presentation so the host shows, WITHOUT teardown — the VC (and
+    /// its webview) stay alive (the coordinator retains this handle). Distinct from
+    /// `dismiss()`: no teardown, the session resumes via `resume()`.
+    func stepAside() async {
+        guard let presenter, presentingViewController != nil else { return }
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            presenter.dismiss(animated: true) { cont.resume() }
+        }
+    }
+
+    /// Re-present after `stepAside()` — the same webview/page rides along.
+    func resume() async {
+        guard let presenter, presentingViewController == nil else { return }
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            presenter.present(self, animated: true) { cont.resume() }
+        }
+    }
+
+    /// Suspend the wall-clock timeout while parked on a user-input step (OTP /
+    /// passkey). The user may take arbitrarily long; cancelling the pending
+    /// force-close keeps the session alive. No-op if none is scheduled.
+    func pauseTimeout() {
+        timeoutTask?.cancel()
+        timeoutTask = nil
+    }
+
+    /// Restart the wall-clock timeout from zero — each automation leg gets a fresh
+    /// budget instead of racing a clock that started at `start`.
+    func restartTimeout() {
+        timeoutTask?.cancel()
+        scheduleTimeout()
+    }
+
+    func dismiss() async {
+        dismissSession()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        markInitialLoadComplete()
+    }
+
+    /// Flips `didLoad` and resumes any `awaitInitialLoad()` waiters on the first
+    /// `didFinish`. Idempotent — later navigations are ignored here.
+    private func markInitialLoadComplete() {
+        guard !didLoad else { return }
+        didLoad = true
+        let waiters = loadWaiters
+        loadWaiters.removeAll()
+        for w in waiters { w.resume() }
+    }
+
+    /// Tear down the session: cancel the timeout, stop the overlay, unblock any
+    /// load waiters, and dismiss the presentation. Idempotent.
+    private func dismissSession() {
+        guard !didDismiss else { return }
+        didDismiss = true
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        overlay?.stop()
+        // Unblock any awaitInitialLoad() callers so a dismiss/timeout before the
+        // first load can't strand them.
+        let waiters = loadWaiters
+        loadWaiters.removeAll()
+        for w in waiters { w.resume() }
+        // Don't actually dismiss in test mode; presenting view controller may be nil.
+        if presentingViewController != nil {
+            dismiss(animated: true)
+        }
+    }
+}

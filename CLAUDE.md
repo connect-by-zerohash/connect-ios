@@ -60,18 +60,20 @@ Tests/ConnectSDKTests/  # Unit tests with mocks
 6. JavaScript message handlers enable communication between native and web
 
 ### WebView Communication
-- **Message Handler**: `WebViewMessageHandler` manages bidirectional messages
-- **Origin Validation**: Only accepts messages from `sdk.connect.xyz` for security
-- **Message Types**: `page-ready`, `content-ready`, `navigate`, `close`, `error`, `event`, `deposit`
-- **Native to Web**: Uses `window.postMessage()` with JSON-serialized data
-- **Web to Native**: Uses `WKScriptMessageHandler` with `NativeIOS` channel
+- **Channel**: One `WKScriptMessageHandler` registered as `NativeIOS`. All inbound messages from the web side (UIWebView `{type, data}` and ZeroAuth ScrapingWebView envelopes) come through this channel.
+- **Routing**: `NativeIOSMessageHandler` decodes the body and dispatches by `role`:
+  - `role === "zeroauth-host"` → `ScrapingWebViewMessageRouter.dispatch` (operations like `auth.login`, `auth.status`, `core.ping`).
+  - otherwise → `UIWebViewMessageRouter.handle` (types: `page-ready`, `content-ready`, `navigate`, `close`, `error`, `event`, `deposit`, `withdrawal`).
+- **Origin Validation**: Only accepts messages from `sdk.connect.xyz` (or the configured local-dev host) for security.
+- **Native to Web**: Always uses `window.postMessage(...)`. UIWebView types pass through unchanged. ScrapingWebView replies arrive as `{type: "scraping-webview-response", data: <ZeroAuthResponse>}` and out-of-band events as `{type: "scraping-webview-event", data: <BridgeEvent>}`.
+- **Web to Native**: Uses `window.webkit.messageHandlers.NativeIOS.postMessage(...)` — payload is either a JSON-stringified UIWebView message or a JS object envelope.
 
 ### Key Components
 
 #### WebViewController (`UI/ViewControllers/WebViewController.swift`)
 - Main view controller hosting the WKWebView
 - Manages loading state with `WebViewLoadingManager`
-- Delegates message handling to `WebViewMessageHandler`
+- Delegates message handling to `NativeIOSMessageHandler`
 - Handles OAuth flows via `WebViewOAuthManager`
 - Hides navigation bar initially, shows it for sub-navigation (in-app browser)
 
@@ -80,11 +82,17 @@ Tests/ConnectSDKTests/  # Unit tests with mocks
 - Shows navigation bar with back button and page title
 - Used for external links that should stay in-app
 
-#### WebViewMessageHandler (`UI/Components/WebViewMessageHandler.swift`)
-- Validates message origins against allowlist
-- Converts JavaScript messages to Swift callbacks
-- Sends JWT, environment, and theme config to web on `page-ready`
-- Prevents JavaScript injection by using JSON serialization
+#### NativeIOSMessageHandler (`Bridge/NativeIOSMessageHandler.swift`)
+- The single `WKScriptMessageHandler` registered on the `NativeIOS` channel.
+- Validates message origins against the allowlist.
+- Decodes the body and routes by `role`:
+  - `UIWebViewMessageRouter` for `{type, data}` shapes.
+  - `ScrapingWebViewMessageRouter` for `ZeroAuthRequest` envelopes.
+
+#### PostMessageReplySink (`Bridge/PostMessageReplySink.swift`)
+- The single outbound writer. All native-to-web traffic goes through `webView.evaluateJavaScript("window.postMessage(...)")`.
+- Reserved ScrapingWebView types: `scraping-webview-response`, `scraping-webview-event`. All other type strings are UIWebView messages.
+- Sanitises UIWebView `type` strings (only `[A-Za-z0-9-]` allowed) and uses `JSONSerialization` to prevent injection.
 
 #### OAuthHandler (`Auth/OAuthHandler.swift`)
 - Uses `ASWebAuthenticationSession` for secure OAuth flows

@@ -16,7 +16,19 @@ let package = Package(
     targets: [
         .target(
             name: "ConnectSDK",
-            resources: [.copy("PrivacyInfo.xcprivacy")]),
+            resources: [
+                .copy("PrivacyInfo.xcprivacy"),
+                .process("Resources/Media.xcassets"),
+                .process("Automation/dom-helpers.js"),
+                .process("Platforms/Coinbase/auth-status.js"),
+                .process("Platforms/Coinbase/auth-passkey-only.js"),
+                .process("Platforms/Coinbase/auth-hide-social.js"),
+                .process("Platforms/Coinbase/auth-prefer-password.js"),
+                .process("Platforms/Coinbase/get-deposit-address.js"),
+                .process("Platforms/Coinbase/get-balance.js"),
+                .process("Platforms/Coinbase/coinbase-balance-queries.js"),
+                .process("Platforms/Coinbase/withdraw.js")
+            ]),
         .testTarget(
             name: "ConnectSDKTests",
             dependencies: ["ConnectSDK"]

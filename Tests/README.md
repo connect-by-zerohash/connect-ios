@@ -41,7 +41,18 @@ Tests/
 │   ├── AuthTypesTests.swift            # Authentication types
 │   │
 │   ├── OAuthHandlerTests.swift         # OAuth flows
-│   ├── WebViewMessageHandlerTests.swift # JS ↔ Native messaging
+│   ├── Bridge/
+│   │   ├── NativeIOSMessageHandlerTests.swift # JS ↔ Native channel routing
+│   │   ├── PostMessageReplySinkTests.swift    # Native → Web outbound writer
+│   │   ├── EnvelopeTests.swift                # AutomationWebView envelope decoding
+│   │   ├── ExecutionContextImplTests.swift    # Operation execution context
+│   │   └── SharedWebViewConfigurationTests.swift
+│   ├── UIWebViewMessageRouterTests.swift # UIWebView `{type, data}` routing
+│   ├── Automation/
+│   │   ├── AutomationWebViewMessageRouterTests.swift # ZeroAuth AutomationWebView dispatch
+│   │   ├── LoginModalViewControllerTests.swift
+│   │   └── OffscreenWebViewRunnerTests.swift
+│   │
 │   ├── WebViewLoadingManagerTests.swift # Loading animation
 │   │
 │   ├── WebViewControllerTests.swift     # UI orchestration
@@ -186,10 +197,11 @@ class MockUIViewController: UIViewController {
     var dismissCalled: Bool
 }
 
-// Delegate spying
-class WebViewMessageHandlerDelegateSpy: WebViewMessageHandlerDelegate {
-    var pageReadyCalls: Int
-    var navigateInvocations: [(url: String, mobileTarget: String?)] = []
+// Delegate spying (defined as a nested type in UIWebViewMessageRouterTests)
+class Spy: UIWebViewMessageRouterDelegate {
+    var contentReady = 0
+    var navigates: [(url: String, target: String?)] = []
+    // ... other delegate hooks
 }
 ```
 
