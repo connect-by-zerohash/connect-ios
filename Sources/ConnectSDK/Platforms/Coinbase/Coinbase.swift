@@ -1,4 +1,5 @@
 import Foundation
+import WebKit
 
 public struct Coinbase: AuthFlow, DepositFlow, BalanceFlow, WithdrawFlow {
     public let id = "cbase"
@@ -18,7 +19,7 @@ public struct Coinbase: AuthFlow, DepositFlow, BalanceFlow, WithdrawFlow {
                 successHosts: ["www.coinbase.com"]
             ),
             title: "Sign in to Coinbase",
-            autoClose: ModalAutoClose(probeJS: Self.passkeyOnlyJS, intervalMs: 100, requiredHits: 2),
+            autoClose: ModalAutoClose(probeJS: Self.loginProbeJS, intervalMs: 100, requiredHits: 2),
             documentStartJS: Self.loginModalJS
         )
 
@@ -33,9 +34,41 @@ public struct Coinbase: AuthFlow, DepositFlow, BalanceFlow, WithdrawFlow {
             return AuthLoginResult(loggedIn: false, outcome: "user-closed")
         case .timeout:
             return AuthLoginResult(loggedIn: false, outcome: "timeout")
-        case .conditionMet:
-            return AuthLoginResult(loggedIn: false, outcome: "passkey-only")
+        case .conditionMet(let code):
+            // The probe names its own condition ("passkey-only" / "account-not-found"),
+            // so the code is the outcome directly. Only Apple is exposed today
+            // (Google is hidden in the WebView), so an account-not-found necessarily
+            // came from Apple — hardcode the provider for now. Eventually if more providers
+            // are supported we'll have to extend this logic.
+            let provider = (code == "account-not-found") ? "apple" : nil
+            if code == "account-not-found" {
+                await Self.clearCoinbaseWebsiteData(ctx: ctx)
+            }
+            return AuthLoginResult(loggedIn: false, outcome: code, provider: provider)
         }
+    }
+
+    /// Remove ALL website data (cookies, localStorage, IndexedDB, caches, …)
+    /// scoped to `coinbase.com` and its subdomains from the SDK's shared
+    /// persistent data store. Only the web layer's native side can do this — the
+    /// embedded page cannot reach `WKWebsiteDataStore`. Scoped to coinbase.com,
+    /// so other domains (e.g. appleid.apple.com) are untouched.
+    @MainActor
+    private static func clearCoinbaseWebsiteData(ctx: ExecutionContext) async {
+        let store = ctx.dataStore
+        let types = WKWebsiteDataStore.allWebsiteDataTypes()
+        let records = await store.dataRecords(ofTypes: types)
+        let coinbase = records.filter { record in
+            let name = record.displayName
+            return name == "coinbase.com" || name.hasSuffix(".coinbase.com")
+        }
+        guard !coinbase.isEmpty else {
+            Log.coinbase.debug("no coinbase.com website-data records to clear after account-not-found")
+            return
+        }
+        await store.removeData(ofTypes: types, for: coinbase)
+        let names = coinbase.map(\.displayName).joined(separator: ",")
+        Log.coinbase.debug("cleared website data for \(coinbase.count) coinbase.com record(s) [\(names, privacy: .public)] after account-not-found")
     }
 
     @MainActor
@@ -415,6 +448,40 @@ public struct Coinbase: AuthFlow, DepositFlow, BalanceFlow, WithdrawFlow {
             )
         }
         return body
+    }()
+
+    private static let signupJS: String = {
+        guard let url = resourceBundle.url(
+                forResource: "auth-signup",
+                withExtension: "js"
+              ),
+              let body = try? String(contentsOf: url, encoding: .utf8)
+        else {
+            preconditionFailure(
+                "Coinbase auth-signup.js missing from SDK bundle. " +
+                "Check Package.swift declares resources: [.process(\"Platforms/Coinbase/auth-signup.js\")]."
+            )
+        }
+        return body
+    }()
+
+    /// Auto-close probe for the login modal. Returns the matching condition
+    /// *code* (consumed as the `auth.login` outcome) or null. Composed from the
+    /// two bundled IIFEs with their trailing `;`/whitespace stripped so each can
+    /// be embedded as an expression inside the wrapping `if (...)`.
+    static let loginProbeJS: String = {
+        func expr(_ js: String) -> String {
+            var s = js
+            while let last = s.last, last == ";" || last == "\n" || last == " " || last == "\r" {
+                s.removeLast()
+            }
+            return s
+        }
+        return "(function(){"
+            + " if ((\(expr(signupJS)))) return \"account-not-found\";"
+            + " if ((\(expr(passkeyOnlyJS)))) return \"passkey-only\";"
+            + " return null;"
+            + " })()"
     }()
 
     private static let hideSocialJS: String = {

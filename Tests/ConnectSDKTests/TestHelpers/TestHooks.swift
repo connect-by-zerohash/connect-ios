@@ -75,8 +75,8 @@ extension ModalViewController {
 
     /// Test-only entry point that simulates an auto-close probe matching
     /// without driving the real DOM poll. (AUTH-3285)
-    func testTriggerConditionMet() {
-        dismissModal(reason: .conditionMet)
+    func testTriggerConditionMet(code: String = "test") {
+        dismissModal(reason: .conditionMet(code))
     }
 
     /// Test-only: exercise popup presentation/tracking without a real

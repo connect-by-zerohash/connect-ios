@@ -78,8 +78,9 @@ public protocol ExecutionContext {
     /// policy (stay-open + success hosts) so social-login redirects to IdP hosts do
     /// not prematurely dismiss it.
     /// `autoClose`: optional generic JS probe the modal polls while open; when
-    /// it matches, the modal force-closes with `.conditionMet`. The caller
-    /// interprets that close (e.g. Coinbase → passkey-only outcome).
+    /// it matches, the modal force-closes with `.conditionMet(code)` carrying the
+    /// probe's condition code. The caller interprets that code (e.g. Coinbase →
+    /// passkey-only / account-not-found outcomes).
     /// `documentStartJS`: optional caller script injected at documentStart on
     /// every main-frame load (e.g. Coinbase hiding the Google/passkey options
     /// that can't complete in an embedded WebView).

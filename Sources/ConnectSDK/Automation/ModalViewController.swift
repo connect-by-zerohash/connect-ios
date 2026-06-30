@@ -11,9 +11,10 @@ public enum ModalCloseReason: Equatable, Sendable {
     case userClosed
     /// The modal exceeded its time ceiling and was force-closed.
     case timeout
-    /// A supplied `ModalAutoClose` probe reported its condition met. The caller
-    /// interprets the meaning (e.g. Coinbase maps it to a passkey-only outcome).
-    case conditionMet
+    /// A supplied `ModalAutoClose` probe reported a condition, carrying the
+    /// condition *code* the probe returned. The caller interprets the code
+    /// (e.g. Coinbase maps "passkey-only"/"account-not-found" to login outcomes).
+    case conditionMet(String)
 }
 
 /// The interactive `auth.login` modal: a user-driven WebView with chrome (title +
@@ -123,27 +124,34 @@ final class ModalViewController:
     }
 
     /// Polls the optional `autoClose` JS probe while the modal is open and
-    /// force-closes with `.conditionMet` once it matches `requiredHits` times
-    /// in a row. No-op when no probe was supplied. Cancelled in `dismissModal`
-    /// so it can't fire post-close. Evaluates first, then sleeps, so the first
-    /// read is immediate and the interval is the gap between confirming reads.
+    /// force-closes with `.conditionMet(code)` once the SAME non-empty condition
+    /// code is returned `requiredHits` times in a row. No-op when no probe was
+    /// supplied. Cancelled in `dismissModal` so it can't fire post-close.
+    /// Evaluates first, then sleeps, so the first read is immediate and the
+    /// interval is the gap between confirming reads.
     private func startAutoCloseProbe() {
         guard let autoClose else { return }
         let intervalNs = UInt64(autoClose.intervalMs) * 1_000_000
         autoCloseProbeTask = Task { @MainActor [weak self] in
+            var lastCode: String?
             var hits = 0
             while !Task.isCancelled {
                 guard let self, !Task.isCancelled else { return }
-                // Tolerate eval failures (page mid-navigation): treat as "not
-                // a hit" and reset, never as a close.
-                let matched = (try? await self.evaluate(autoClose.probeJS)) as? Bool == true
-                if matched {
-                    hits += 1
+                // Tolerate eval failures (page mid-navigation): a thrown error
+                // or a falsy/empty return is "no match" and resets the counter,
+                // never closes. A non-empty string is the condition code.
+                let code = (try? await self.evaluate(autoClose.probeJS)) as? String
+                if let code, !code.isEmpty {
+                    // Require the same code across consecutive reads — a transient
+                    // flip between screens can't accumulate toward a close.
+                    hits = (code == lastCode) ? hits + 1 : 1
+                    lastCode = code
                     if hits >= autoClose.requiredHits {
-                        self.dismissModal(reason: .conditionMet)
+                        self.dismissModal(reason: .conditionMet(code))
                         return
                     }
                 } else {
+                    lastCode = nil
                     hits = 0
                 }
                 try? await Task.sleep(nanoseconds: intervalNs)
@@ -210,6 +218,17 @@ final class ModalViewController:
         timeoutTask = nil
         autoCloseProbeTask?.cancel()
         autoCloseProbeTask = nil
+        // Shut the WebView down before resuming waiters (and before any
+        // post-close cleanup like website-data clearing). The modal stays alive
+        // for the ~0.3s dismiss animation; left running, the live page can keep
+        // landing Set-Cookie responses and re-writing storage, racing a caller's
+        // clear. Stop the load, detach delegates, and navigate to about:blank so
+        // the page's JS context is torn down and can't re-set cookies/storage.
+        // We're closing regardless, so this is safe for every close reason.
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
+        webView?.uiDelegate = nil
+        webView?.load(URLRequest(url: URL(string: "about:blank")!))
         closeReason = reason
         onClose?(reason)
         let waiters = closeWaiters

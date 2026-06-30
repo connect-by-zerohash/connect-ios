@@ -109,9 +109,9 @@ struct ModalViewControllerTests {
 
         var reasons: [ModalCloseReason] = []
         vc.onClose = { reasons.append($0) }
-        vc.testTriggerConditionMet()
-        vc.testTriggerConditionMet()
-        #expect(reasons == [.conditionMet])
+        vc.testTriggerConditionMet(code: "passkey-only")
+        vc.testTriggerConditionMet(code: "passkey-only")
+        #expect(reasons == [.conditionMet("passkey-only")])
     }
 
     @Test("A close before the probe match wins; later .conditionMet is ignored")

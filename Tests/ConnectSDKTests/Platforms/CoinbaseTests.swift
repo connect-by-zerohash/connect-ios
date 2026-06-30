@@ -6,9 +6,9 @@ import Foundation
 @Suite("Coinbase platform")
 struct CoinbaseTests {
 
-    @Test("id is 'coinbase'")
+    @Test("id is 'cbase'")
     func idIsCoinbase() {
-        #expect(Coinbase().id == "coinbase")
+        #expect(Coinbase().id == "cbase")
     }
 
     @Test("login presents the modal at login.coinbase.com/signin")
@@ -94,17 +94,33 @@ struct CoinbaseTests {
         #expect(ctx.modalCalls.count == 1)
         let probe = ctx.modalCalls[0].autoClose
         #expect(probe != nil)
-        // The bundled detector keys on Coinbase's passkey-verify button.
+        // The combined detector keys on Coinbase's passkey-verify button and
+        // the signup-page signals, and names each condition via its return code.
         #expect(probe?.probeJS.contains("passkey-verify-button") == true)
+        #expect(probe?.probeJS.contains("signup-header") == true)
+        #expect(probe?.probeJS.contains("account-not-found") == true)
     }
 
     @Test("login condition-met reports outcome=passkey-only, loggedIn=false, no status check")
     func loginPasskeyOnly() async throws {
         let p = Coinbase()
         let ctx = MockExecutionContext()
-        ctx.modalCloseReason = .conditionMet
+        ctx.modalCloseReason = .conditionMet("passkey-only")
         let result = try await p.login(ctx: ctx)
         #expect(result.outcome == "passkey-only")
+        #expect(result.loggedIn == false)
+        #expect(result.provider == nil)
+        #expect(ctx.offscreenCalls.isEmpty)
+    }
+
+    @Test("login account-not-found reports outcome + provider=apple, loggedIn=false, no status check")
+    func loginAccountNotFound() async throws {
+        let p = Coinbase()
+        let ctx = MockExecutionContext()
+        ctx.modalCloseReason = .conditionMet("account-not-found")
+        let result = try await p.login(ctx: ctx)
+        #expect(result.outcome == "account-not-found")
+        #expect(result.provider == "apple")
         #expect(result.loggedIn == false)
         #expect(ctx.offscreenCalls.isEmpty)
     }

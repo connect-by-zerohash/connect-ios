@@ -11,7 +11,7 @@ struct PlatformRegistryTests {
     @Test("Empty registry returns nil for unknown id")
     func emptyLookup() {
         let r = PlatformRegistry()
-        #expect(r["coinbase"] == nil)
+        #expect(r["cbase"] == nil)
     }
 
     @Test("Default-seeded registry exposes seeded platforms")

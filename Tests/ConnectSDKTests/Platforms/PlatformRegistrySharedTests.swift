@@ -5,6 +5,6 @@ import Testing
 struct PlatformRegistrySharedTests {
     @Test("Default-registered registry contains Coinbase")
     func sharedHasCoinbase() {
-        #expect(PlatformRegistry.shared["coinbase"] != nil)
+        #expect(PlatformRegistry.shared["cbase"] != nil)
     }
 }

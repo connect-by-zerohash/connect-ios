@@ -22,6 +22,7 @@ let package = Package(
                 .process("Automation/dom-helpers.js"),
                 .process("Platforms/Coinbase/auth-status.js"),
                 .process("Platforms/Coinbase/auth-passkey-only.js"),
+                .process("Platforms/Coinbase/auth-signup.js"),
                 .process("Platforms/Coinbase/auth-hide-social.js"),
                 .process("Platforms/Coinbase/auth-prefer-password.js"),
                 .process("Platforms/Coinbase/get-deposit-address.js"),
