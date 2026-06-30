@@ -22,6 +22,8 @@ final class AutomationSessionViewController:
     private let timeoutMs: Int
     private let overlayOptions: OverlayOptions
     private let showOverlay: Bool
+    /// Host-selected theme, forwarded to the branded overlay.
+    private let theme: Theme
     /// Only created/added when `showOverlay` is true.
     private var overlay: LoadingOverlayView?
     private var webView: WKWebView!
@@ -44,12 +46,14 @@ final class AutomationSessionViewController:
          sharedConfig: WKWebViewConfiguration,
          timeoutMs: Int = 300_000,
          overlay: OverlayOptions = .default,
-         showOverlay: Bool = false) {
+         showOverlay: Bool = false,
+         theme: Theme = .system) {
         self.initialURL = url
         self.webViewConfig = sharedConfig
         self.timeoutMs = timeoutMs
         self.overlayOptions = overlay
         self.showOverlay = showOverlay
+        self.theme = theme
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
     }
@@ -77,7 +81,7 @@ final class AutomationSessionViewController:
         // Opaque branded overlay ON TOP of the WebView (added last so it covers the
         // page) while the automation drives Coinbase. Lifted via revealOverlay.
         if showOverlay {
-            let overlay = LoadingOverlayView(options: overlayOptions)
+            let overlay = LoadingOverlayView(options: overlayOptions, theme: theme)
             view.addSubview(overlay)
             overlay.pinToSuperview()
             overlay.start()

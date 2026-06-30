@@ -8,17 +8,22 @@ final class ExecutionContextImpl: ExecutionContext {
     private let shared: SharedWebViewConfiguration
     private let currentRequestId: String
     private weak var eventEmitter: BridgeEventEmitting?
+    /// Host-selected theme, threaded down to the automation VCs so their branded
+    /// overlay can resolve light/dark colors.
+    private let theme: Theme
 
     var dataStore: WKWebsiteDataStore { shared.dataStore }
 
     init(host: UIViewController,
          shared: SharedWebViewConfiguration,
          currentRequestId: String,
-         eventEmitter: BridgeEventEmitting) {
+         eventEmitter: BridgeEventEmitting,
+         theme: Theme = .system) {
         self.host = host
         self.shared = shared
         self.currentRequestId = currentRequestId
         self.eventEmitter = eventEmitter
+        self.theme = theme
     }
 
     func presentModalWebView(
@@ -64,7 +69,8 @@ final class ExecutionContextImpl: ExecutionContext {
             url: url,
             sharedConfig: shared.platformConfiguration(),
             overlay: overlay,
-            showOverlay: showOverlay
+            showOverlay: showOverlay,
+            theme: theme
         )
         // Give the session its presenter so it can re-present itself in resume()
         // after a stepAside() (the per-request ctx is gone by then). Presented
@@ -127,7 +133,8 @@ final class ExecutionContextImpl: ExecutionContext {
             showOverlay: showOverlay,
             waitForChallengeClearance: waitForChallengeClearance,
             sharedConfig: shared.platformConfiguration(),
-            timeoutMs: timeoutMs
+            timeoutMs: timeoutMs,
+            theme: theme
         )
         // Presented DIRECTLY full-screen (no UINavigationController): the
         // overlaid page must occupy the whole screen so the SPA renders. The

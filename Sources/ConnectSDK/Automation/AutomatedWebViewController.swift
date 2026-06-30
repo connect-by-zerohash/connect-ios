@@ -66,6 +66,8 @@ final class AutomatedWebViewController: UIViewController, WKNavigationDelegate {
     private let waitForChallengeClearance: Bool
     private let webViewConfig: WKWebViewConfiguration
     private let timeoutMs: Int
+    /// Host-selected theme, forwarded to the branded overlay.
+    private let theme: Theme
 
     // MARK: - State
 
@@ -123,7 +125,8 @@ final class AutomatedWebViewController: UIViewController, WKNavigationDelegate {
          showOverlay: Bool,
          waitForChallengeClearance: Bool = false,
          sharedConfig: WKWebViewConfiguration,
-         timeoutMs: Int) {
+         timeoutMs: Int,
+         theme: Theme = .system) {
         self.initialURL = url
         self.settle = settle
         self.script = script
@@ -133,6 +136,7 @@ final class AutomatedWebViewController: UIViewController, WKNavigationDelegate {
         self.waitForChallengeClearance = waitForChallengeClearance
         self.webViewConfig = sharedConfig
         self.timeoutMs = timeoutMs
+        self.theme = theme
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -188,7 +192,7 @@ final class AutomatedWebViewController: UIViewController, WKNavigationDelegate {
     /// last, so it sits above the web view and covers the page.
     private func presentOverlay() {
         guard overlay == nil else { return }
-        let overlay = LoadingOverlayView(options: overlayOptions)
+        let overlay = LoadingOverlayView(options: overlayOptions, theme: theme)
         view.addSubview(overlay)
         overlay.pinToSuperview()
         overlay.start()

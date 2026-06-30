@@ -54,4 +54,22 @@ struct LoadingOverlayViewTests {
         #expect(view.currentTitleText == "Hello")
         #expect(view.currentSubtitleText == "First")
     }
+
+    // MARK: - Theming (AUTH-3365)
+
+    @Test("Light theme uses the white background and dark primary text")
+    func lightThemeColors() {
+        let view = LoadingOverlayView(options: .default, theme: .light)
+        #expect(view.backgroundColor == UIColor(hexString: "#ffffff"))
+        #expect(view.titleLabel.textColor == UIColor(hexString: "#111827"))
+    }
+
+    @Test("Dark theme uses the dark background and white primary text")
+    func darkThemeColors() {
+        let view = LoadingOverlayView(options: .default, theme: .dark)
+        // Explicit themes ignore the trait collection, so this holds regardless
+        // of the test host's appearance.
+        #expect(view.backgroundColor == Theme.darkBackgroundColor)
+        #expect(view.titleLabel.textColor == .white)
+    }
 }

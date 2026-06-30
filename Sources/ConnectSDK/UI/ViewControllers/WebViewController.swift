@@ -203,7 +203,8 @@ class WebViewController: UIViewController, WKNavigationDelegate,
                     host: self,
                     shared: self.sharedConfig,
                     currentRequestId: requestId,
-                    eventEmitter: self.automationWebViewRouter
+                    eventEmitter: self.automationWebViewRouter,
+                    theme: self.themeEnum
                 )
             }
         )

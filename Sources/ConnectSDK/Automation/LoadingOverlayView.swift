@@ -17,6 +17,9 @@ final class LoadingOverlayView: UIView {
     /// The resolved options driving copy, colors, and cycle timing.
     let options: OverlayOptions
 
+    /// Host-selected theme used to resolve light/dark colors.
+    let theme: Theme
+
     // MARK: - Subviews
 
     private let stage = UIView()
@@ -24,6 +27,14 @@ final class LoadingOverlayView: UIView {
     private var dots: [UIView] = []
     let titleLabel = UILabel()
     let subtitleLabel = UILabel()
+
+    // Footer pieces kept so `applyTheme` can recolor them.
+    private let footerBorder = UIView()
+    private let footerLabel = UILabel()
+    /// Trimmed brand mark, retained so `applyTheme` can re-render it (original in
+    /// light, white template in dark). Nil if the asset failed to load.
+    private var markBaseImage: UIImage?
+    private var markImageView: UIImageView?
 
     // MARK: - Cycling state
 
@@ -57,8 +68,9 @@ final class LoadingOverlayView: UIView {
 
     // MARK: - Init
 
-    init(options: OverlayOptions) {
+    init(options: OverlayOptions, theme: Theme = .system) {
         self.options = options
+        self.theme = theme
         self.slotCount = max(options.titles.count, options.subtitles.count)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -82,9 +94,8 @@ final class LoadingOverlayView: UIView {
     }
 
     private func setupViews() {
-        backgroundColor = UIColor(hexString: "#ffffff") ?? .white
         // Opaque + swallow touches so the user can't interact with the page
-        // underneath while automation runs.
+        // underneath while automation runs. (Background set by `applyTheme`.)
         isOpaque = true
         isUserInteractionEnabled = true
 
@@ -117,13 +128,11 @@ final class LoadingOverlayView: UIView {
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = .systemFont(ofSize: 22, weight: .bold)
-        titleLabel.textColor = UIColor(hexString: "#111827") ?? .label
         titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 0
 
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.font = .systemFont(ofSize: 15, weight: .regular)
-        subtitleLabel.textColor = UIColor(hexString: "#4b5563") ?? .secondaryLabel
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 0
 
@@ -163,6 +172,8 @@ final class LoadingOverlayView: UIView {
             footer.trailingAnchor.constraint(equalTo: trailingAnchor),
             footer.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor),
         ])
+
+        applyTheme(for: traitCollection)
     }
 
     /// Footer mirroring overlay.ts's `.zeroauth-footer`: a hairline top border,
@@ -173,10 +184,9 @@ final class LoadingOverlayView: UIView {
         let footer = UIView()
         footer.translatesAutoresizingMaskIntoConstraints = false
 
-        // Hairline top border, mirroring the CSS `border-top: 1px solid #e5e7eb`.
-        let border = UIView()
+        // Hairline top border (color set by `applyTheme`).
+        let border = footerBorder
         border.translatesAutoresizingMaskIntoConstraints = false
-        border.backgroundColor = UIColor(hexString: "#e5e7eb") ?? .separator
         footer.addSubview(border)
 
         // Centered "Powered by" + mark row (CSS `display:flex; gap:8px`).
@@ -187,10 +197,10 @@ final class LoadingOverlayView: UIView {
         row.spacing = Metrics.footerGap
         footer.addSubview(row)
 
-        let label = UILabel()
+        let label = footerLabel
         label.text = "Powered by"
         label.font = .systemFont(ofSize: 14, weight: .regular)
-        label.textColor = UIColor(hexString: "#111827") ?? .label
+        // Text color set by `applyTheme`.
         row.addArrangedSubview(label)
 
         // Brand mark from the asset catalog (vector, rendered with its own
@@ -204,8 +214,10 @@ final class LoadingOverlayView: UIView {
         // the "Powered by" text. `footerMarkHeight` then sizes the bare glyph.
         if let raw = UIImage(named: options.brand.theme.markAssetName,
                              in: .module, compatibleWith: nil) {
-            let mark = (raw.trimmedToOpaqueBounds() ?? raw).withRenderingMode(.alwaysOriginal)
-            let imageView = UIImageView(image: mark)
+            let mark = raw.trimmedToOpaqueBounds() ?? raw
+            markBaseImage = mark
+            // Rendering mode + tint set by `applyTheme`.
+            let imageView = UIImageView()
             imageView.translatesAutoresizingMaskIntoConstraints = false
             imageView.contentMode = .scaleAspectFit
             // Optical centering nudge, mirroring the reference overlay's
@@ -215,6 +227,7 @@ final class LoadingOverlayView: UIView {
             imageView.transform = CGAffineTransform(
                 translationX: 0, y: -Metrics.footerMarkOpticalRise)
             row.addArrangedSubview(imageView)
+            markImageView = imageView
             let aspect = mark.size.width / mark.size.height
             NSLayoutConstraint.activate([
                 imageView.heightAnchor.constraint(equalToConstant: Metrics.footerMarkHeight),
@@ -236,6 +249,51 @@ final class LoadingOverlayView: UIView {
             row.trailingAnchor.constraint(lessThanOrEqualTo: footer.trailingAnchor, constant: -24),
         ])
         return footer
+    }
+
+    // MARK: - Theming
+
+    /// Resolve theme-dependent colors. Dark values are fixed (not dynamic system
+    /// colors) so an explicit `.light`/`.dark` renders correctly even on a device
+    /// set to the opposite appearance. Dots keep their brand colors in both modes.
+    private func applyTheme(for traitCollection: UITraitCollection) {
+        let isDark = theme.shouldUseDarkMode(in: traitCollection)
+
+        backgroundColor = isDark
+            ? Theme.darkBackgroundColor
+            : (UIColor(hexString: "#ffffff") ?? .white)
+
+        let primaryText: UIColor = isDark ? .white : (UIColor(hexString: "#111827") ?? .label)
+        titleLabel.textColor = primaryText
+        footerLabel.textColor = primaryText
+
+        subtitleLabel.textColor = isDark
+            ? (UIColor(hexString: "#9ca3af") ?? .secondaryLabel)   // gray-400, legible on dark
+            : (UIColor(hexString: "#4b5563") ?? .secondaryLabel)   // gray-600
+
+        footerBorder.backgroundColor = isDark
+            ? (UIColor(hexString: "#374151") ?? .separator)        // gray-700 hairline on dark
+            : (UIColor(hexString: "#e5e7eb") ?? .separator)        // gray-200
+
+        // Dark-on-transparent marks would vanish on the dark background, so use a
+        // white template there; keep their own colors in light.
+        if let base = markBaseImage {
+            if isDark {
+                markImageView?.image = base.withRenderingMode(.alwaysTemplate)
+                markImageView?.tintColor = .white
+            } else {
+                markImageView?.image = base.withRenderingMode(.alwaysOriginal)
+            }
+        }
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        // Only `.system` tracks the device; re-apply when the appearance flips.
+        guard theme == .system,
+              traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle
+        else { return }
+        applyTheme(for: traitCollection)
     }
 
     // MARK: - Lifecycle
