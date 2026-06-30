@@ -47,8 +47,10 @@ final class LoadingOverlayView: UIView {
     // MARK: - Visual constants (mirrors overlay.ts CSS)
 
     private enum Metrics {
-        static let dotSize: CGFloat = 15        // --dot-size
-        static let dotSpacing: CGFloat = 5      // --dot-spacing
+        // Sourced from Constants.LoadingAnimation so both overlays share one
+        // source of truth and the dots stay equally spaced (no overlap).
+        static let dotSize: CGFloat = Constants.LoadingAnimation.dotSize        // --dot-size
+        static let dotSpacing: CGFloat = Constants.LoadingAnimation.dotSpacing  // --dot-spacing
         static let stageGap: CGFloat = 56       // gap between loader and text
         static let textGap: CGFloat = 6         // gap between title and subtitle
         // Gap between "Powered by" and the mark. The reference uses 8px, but it
@@ -383,7 +385,7 @@ final class LoadingOverlayView: UIView {
         guard dotAnimationRunning, dots.count >= 1 else { return }
         let firstDot = dots[0]
         UIView.animate(withDuration: 0.4, delay: 0.3, options: [.curveEaseInOut], animations: {
-            firstDot.transform = CGAffineTransform(translationX: -(Metrics.dotSpacing * 1.5), y: 0)
+            firstDot.transform = CGAffineTransform(translationX: -Constants.LoadingAnimation.dotTranslation, y: 0)
         }) { [weak self] _ in
             self?.animateStep2()
         }
@@ -392,7 +394,7 @@ final class LoadingOverlayView: UIView {
     private func animateStep2() {
         guard dotAnimationRunning, dots.count >= 3 else { return }
         dots[1].transform = .identity
-        dots[2].transform = CGAffineTransform(translationX: Metrics.dotSpacing * 1.5, y: 0)
+        dots[2].transform = CGAffineTransform(translationX: Constants.LoadingAnimation.dotTranslation, y: 0)
 
         UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseInOut], animations: {
             self.dots[1].alpha = 1.0

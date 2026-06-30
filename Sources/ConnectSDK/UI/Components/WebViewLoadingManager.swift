@@ -248,10 +248,9 @@ class WebViewLoadingManager {
         guard dots.count >= 1 else { return }
 
         let firstDot = dots[0]
-        let dotSpacing = Constants.LoadingAnimation.dotSpacing
 
         UIView.animate(withDuration: 0.4, delay: 0.3, options: [.curveEaseInOut], animations: {
-            firstDot.transform = CGAffineTransform(translationX: -(dotSpacing * 1.5), y: 0)
+            firstDot.transform = CGAffineTransform(translationX: -Constants.LoadingAnimation.dotTranslation, y: 0)
         }) { _ in
             self.animateStep2()
         }
@@ -261,11 +260,9 @@ class WebViewLoadingManager {
         // Step 2: Fade in the other two dots sequentially over 600ms
         guard dots.count >= 3 else { return }
 
-        let dotSpacing = Constants.LoadingAnimation.dotSpacing
-
         // Position dots
         dots[1].transform = CGAffineTransform(translationX: 0, y: 0)
-        dots[2].transform = CGAffineTransform(translationX: dotSpacing * 1.5, y: 0)
+        dots[2].transform = CGAffineTransform(translationX: Constants.LoadingAnimation.dotTranslation, y: 0)
 
         // Fade in second dot first
         UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseInOut], animations: {
