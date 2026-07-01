@@ -435,16 +435,16 @@ public struct Coinbase: AuthFlow, DepositFlow, BalanceFlow, WithdrawFlow {
         return body
     }()
 
-    private static let passkeyOnlyJS: String = {
+    private static let detectUnsupportedTwoFactorJS: String = {
         guard let url = resourceBundle.url(
-                forResource: "auth-passkey-only",
+                forResource: "auth-detect-unsupported-2fa",
                 withExtension: "js"
               ),
               let body = try? String(contentsOf: url, encoding: .utf8)
         else {
             preconditionFailure(
-                "Coinbase auth-passkey-only.js missing from SDK bundle. " +
-                "Check Package.swift declares resources: [.process(\"Platforms/Coinbase/auth-passkey-only.js\")]."
+                "Coinbase auth-detect-unsupported-2fa.js missing from SDK bundle. " +
+                "Check Package.swift declares resources: [.process(\"Platforms/Coinbase/auth-detect-unsupported-2fa.js\")]."
             )
         }
         return body
@@ -479,7 +479,7 @@ public struct Coinbase: AuthFlow, DepositFlow, BalanceFlow, WithdrawFlow {
         }
         return "(function(){"
             + " if ((\(expr(signupJS)))) return \"account-not-found\";"
-            + " if ((\(expr(passkeyOnlyJS)))) return \"passkey-only\";"
+            + " if ((\(expr(detectUnsupportedTwoFactorJS)))) return \"passkey-only\";"
             + " return null;"
             + " })()"
     }()
@@ -499,16 +499,16 @@ public struct Coinbase: AuthFlow, DepositFlow, BalanceFlow, WithdrawFlow {
         return body
     }()
 
-    private static let preferPasswordJS: String = {
+    private static let chooseTwoFactorMethodJS: String = {
         guard let url = resourceBundle.url(
-                forResource: "auth-prefer-password",
+                forResource: "auth-choose-2fa-method",
                 withExtension: "js"
               ),
               let body = try? String(contentsOf: url, encoding: .utf8)
         else {
             preconditionFailure(
-                "Coinbase auth-prefer-password.js missing from SDK bundle. " +
-                "Check Package.swift declares resources: [.process(\"Platforms/Coinbase/auth-prefer-password.js\")]."
+                "Coinbase auth-choose-2fa-method.js missing from SDK bundle. " +
+                "Check Package.swift declares resources: [.process(\"Platforms/Coinbase/auth-choose-2fa-method.js\")]."
             )
         }
         return body
@@ -517,9 +517,10 @@ public struct Coinbase: AuthFlow, DepositFlow, BalanceFlow, WithdrawFlow {
     /// Combined documentStart script for the login modal:
     ///  • hide unsupported buttons everywhere — Google + all passkey buttons
     ///    (neither can complete in an embedded WebView),
-    ///  • when Password is an available 2FA method, auto-advance to it.
+    ///  • auto-advance to a supported 2FA method — Password when offered, else
+    ///    an OTP factor (SMS/TOTP) reached via the "try another way" tray.
     private static let loginModalJS: String = {
-        hideSocialJS + "\n" + preferPasswordJS
+        hideSocialJS + "\n" + chooseTwoFactorMethodJS
     }()
 
     private static let depositAddressJS: String = {

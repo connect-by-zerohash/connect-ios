@@ -30,11 +30,15 @@ struct CoinbaseTests {
         #expect(policy.successHosts.contains("www.coinbase.com"))
         // The login modal injects a documentStart script that:
         //  • hides Google + all passkey buttons everywhere (can't complete in-embed),
-        //  • auto-advances to Password when it's an available 2FA method.
+        //  • auto-advances to a supported 2FA method — Password when offered,
+        //    else an OTP factor (SMS/TOTP) reached via the "try another way" tray.
         let docJS = try #require(ctx.modalCalls[0].documentStartJS)
         #expect(docJS.contains("sign-in-with-google"))
         #expect(docJS.contains(#"button[data-testid*="passkey" i]"#))
         #expect(docJS.contains("two-factor-button-PASSWORD"))
+        // New-design routing: open the tray and prefer SMS when password isn't offered.
+        #expect(docJS.contains("try-another-way-button"))
+        #expect(docJS.contains("two-factor-button-SMS"))
     }
 
     @Test("login success-close folds auth.status and reports outcome=success")
