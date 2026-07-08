@@ -46,16 +46,14 @@ Reviewers check:
 
 ## Review Checklist
 
-```
-☐ Naming follows conventions (PascalCase/camelCase)
-☐ Access modifiers explicit
-☐ Delegates marked weak
-☐ Public APIs documented with ///
-☐ No sensitive data logged
-☐ No hardcoded credentials
-☐ Tests cover new functionality
-☐ No compiler warnings
-```
+- [ ] Naming follows conventions (PascalCase/camelCase)
+- [ ] Access modifiers explicit
+- [ ] Delegates marked weak
+- [ ] Public APIs documented with ///
+- [ ] No sensitive data logged
+- [ ] No hardcoded credentials
+- [ ] Tests cover new functionality
+- [ ] No compiler warnings
 
 **Full standards:** See [Code Standards](CODE_STANDARDS.md)
 

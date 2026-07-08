@@ -105,10 +105,10 @@ func testThemeLightRawValue() {
   - `testWebViewController_InitializationWithValidParameters` → `"WebViewController init valid parameters"`
 
 Benefits:
-- ✅ More readable in Xcode test navigator
-- ✅ Clearer test report output
-- ✅ Better test discovery in CI/CD logs
-- ✅ Self-documenting code
+- More readable in Xcode test navigator
+- Clearer test report output
+- Better test discovery in CI/CD logs
+- Self-documenting code
 
 ### Naming Convention
 
@@ -473,7 +473,7 @@ import UIKit
 
 ## Best Practices
 
-✅ **Do:**
+**Do:**
 - Add `@Test("description")` to every test with clear, concise descriptions
 - Use `MockData` factories for all test data
 - Group related tests in structs
@@ -485,7 +485,7 @@ import UIKit
 - Reuse mock objects instead of creating new ones
 - Use present tense in descriptions ("component creates", not "component created")
 
-❌ **Don't:**
+**Don't:**
 - Omit `@Test("description")` parameter
 - Use vague descriptions like "test", "verify", or "check"
 - Write descriptions longer than 7-8 words typically

@@ -86,7 +86,7 @@ Before presenting any of the apps, you'll need to obtain a JWT token from
 your backend. This token authenticates the end user with the Connect
 platform.
 
-> 📘 **Note:** For detailed instructions on obtaining JWT tokens, please refer to the [Connect documentation](https://docs.zerohash.com/docs/connect).
+> **Note:** For detailed instructions on obtaining JWT tokens, please refer to the [Connect documentation](https://docs.zerohash.com/docs/connect).
 
 ### Configure the OAuth callback
 
@@ -148,9 +148,9 @@ class AuthViewController: UIViewController {
             },
             onDeposit: { deposit in
                 if deposit.success {
-                    print("✅ Deposit \(deposit.depositId ?? "?") processed")
+                    print("Deposit \(deposit.depositId ?? "?") processed")
                 } else {
-                    print("⏳ Deposit status: \(deposit.status ?? "unknown")")
+                    print("Deposit status: \(deposit.status ?? "unknown")")
                 }
             }
         )
@@ -197,9 +197,9 @@ class RecoveryViewController: UIViewController {
             },
             onWithdrawal: { withdrawal in
                 if withdrawal.success {
-                    print("✅ Recovery withdrawal \(withdrawal.withdrawalId ?? "?") processed")
+                    print("Recovery withdrawal \(withdrawal.withdrawalId ?? "?") processed")
                 } else {
-                    print("⏳ Recovery withdrawal status: \(withdrawal.status ?? "unknown")")
+                    print("Recovery withdrawal status: \(withdrawal.status ?? "unknown")")
                 }
             }
         )
@@ -245,12 +245,12 @@ class WithdrawalViewController: UIViewController {
             },
             onWithdrawal: { withdrawal in
                 if withdrawal.success {
-                    print("✅ Withdrawal \(withdrawal.withdrawalId ?? "?") processed")
+                    print("Withdrawal \(withdrawal.withdrawalId ?? "?") processed")
                     print("Asset: \(withdrawal.assetId ?? "N/A")")
                     print("Network: \(withdrawal.networkId ?? "N/A")")
                     print("Amount: \(withdrawal.amount ?? "N/A")")
                 } else {
-                    print("⏳ Withdrawal status: \(withdrawal.status ?? "unknown")")
+                    print("Withdrawal status: \(withdrawal.status ?? "unknown")")
                 }
             }
         )
