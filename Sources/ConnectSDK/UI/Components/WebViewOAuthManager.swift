@@ -31,21 +31,36 @@ class WebViewOAuthManager {
     // MARK: - Public Methods
 
     func handleExternalNavigation(url: String, from viewController: UIViewController, isOauth: Bool) {
-        if isOauth {
-            handleOAuthFlow(url: url, from: viewController)
-        } else {
-            openInExternalBrowser(url: url)
-        }
-    }
-    
-    private func openInExternalBrowser(url: String) {
-        guard let url = URL(string: url) else {
-            Log.error("Invalid URL: \(url)")
+        guard let validated = Self.validatedHTTPSURL(url) else {
+            let host = URL(string: url)?.host ?? "?"
+            Log.bridge.error("rejected external navigation: non-https or invalid URL host=\(host, privacy: .private) isOauth=\(isOauth)")
             return
         }
+        if isOauth {
+            handleOAuthFlow(url: validated.absoluteString, from: viewController)
+        } else {
+            openInExternalBrowser(url: validated)
+        }
+    }
 
+    /// The web app can request `navigate` with an arbitrary URL. We restrict
+    /// externally opened URLs and OAuth authorization URLs to `https` so
+    /// non-web schemes (`tel:`, custom deep links, `data:`, `javascript:`, …)
+    /// and cleartext `http:` cannot ride the trusted-origin `navigate` channel
+    /// out to `UIApplication.open` or `ASWebAuthenticationSession`. Host
+    /// allow-listing is not applied here because OAuth authorize hosts and
+    /// external destinations are third-party by design.
+    static func validatedHTTPSURL(_ raw: String) -> URL? {
+        guard let url = URL(string: raw),
+              url.scheme?.lowercased() == "https",
+              url.host?.isEmpty == false
+        else { return nil }
+        return url
+    }
+
+    private func openInExternalBrowser(url: URL) {
         guard UIApplication.shared.canOpenURL(url) else {
-            Log.error("Cannot open URL: \(url)")
+            Log.bridge.error("cannot open URL host=\(url.host ?? "?", privacy: .private)")
             return
         }
 

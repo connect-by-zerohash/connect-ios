@@ -72,6 +72,31 @@ public class ConnectSDK {
     }
 }
 
+// MARK: - Website Data
+
+extension ConnectSDK {
+
+    /// Clears all website data (cookies, localStorage, IndexedDB, caches, service
+    /// workers, …) from the SDK's private `WKWebsiteDataStore`.
+    ///
+    /// The SDK uses a persistent store, isolated from the host app's own
+    /// `WKWebView` storage, so that third-party session state (e.g. a exchange
+    /// login) can be reused by the offscreen `auth.status` runner and the modal
+    /// login flow. That state survives app relaunches by design.
+    ///
+    /// Call this on user sign-out from your app, or from a "clear cache"
+    /// affordance, to remove that persisted state. Calling during an active
+    /// session invalidates cookies and storage the running session may depend on.
+    @MainActor
+    public static func clearWebsiteData() async {
+        let store = WKWebsiteDataStore(forIdentifier: SDKDataStoreIdentifier.shared)
+        await store.removeData(
+            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+            modifiedSince: .distantPast
+        )
+    }
+}
+
 // MARK: - SDK Version
 
 extension ConnectSDK {

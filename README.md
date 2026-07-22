@@ -455,6 +455,22 @@ Configures a Recovery session that can be presented later. Returns a
 Configures a Withdrawal session that can be presented later. Returns a
 `ConnectWithdrawalSession`.
 
+#### `clearWebsiteData()` `async`
+
+Clears all website data (cookies, localStorage, IndexedDB, caches, service
+workers) from the SDK-private `WKWebsiteDataStore`. The SDK uses a
+persistent store, isolated from the host app's other `WKWebView`
+storage, so third-party session state (e.g. a exchange login) can be
+reused between offscreen and modal runs and survives app relaunches.
+
+Call this on user sign-out or from a "clear cache" affordance in your app.
+Calling during an active session invalidates cookies and storage the
+running session may depend on.
+
+```swift
+Task { await ConnectSDK.clearWebsiteData() }
+```
+
 **Shared parameters:**
 
 | Parameter | Type | Default | Description |

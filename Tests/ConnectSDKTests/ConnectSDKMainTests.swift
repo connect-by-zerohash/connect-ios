@@ -6,6 +6,7 @@
 import Foundation
 import Testing
 import AuthenticationServices
+import WebKit
 @testable import ConnectSDK
 
 @MainActor
@@ -162,5 +163,37 @@ struct ConnectSDKIntegrationTests {
         // Cancel
         session.cancel()
         #expect(session.isActive == false)
+    }
+}
+
+@MainActor
+struct ConnectSDKClearWebsiteDataTests {
+
+    @Test("clearWebsiteData leaves the SDK-private store with zero data records")
+    func testClearLeavesStoreEmpty() async {
+        await ConnectSDK.clearWebsiteData()
+
+        let store = WKWebsiteDataStore(forIdentifier: SDKDataStoreIdentifier.shared)
+        let records = await store.dataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes())
+        #expect(records.isEmpty)
+    }
+
+    @Test("clearWebsiteData targets the SDK-private store, not WKWebsiteDataStore.default()")
+    func testClearDoesNotTouchDefaultStore() async {
+        // Sanity: the identifier-based store the API clears is not the process-wide default.
+        let store = WKWebsiteDataStore(forIdentifier: SDKDataStoreIdentifier.shared)
+        #expect(store !== WKWebsiteDataStore.default())
+        // Clearing should succeed without throwing even if the store has no records.
+        await ConnectSDK.clearWebsiteData()
+    }
+
+    @Test("clearWebsiteData is idempotent")
+    func testClearIsIdempotent() async {
+        await ConnectSDK.clearWebsiteData()
+        await ConnectSDK.clearWebsiteData()
+
+        let store = WKWebsiteDataStore(forIdentifier: SDKDataStoreIdentifier.shared)
+        let records = await store.dataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes())
+        #expect(records.isEmpty)
     }
 }

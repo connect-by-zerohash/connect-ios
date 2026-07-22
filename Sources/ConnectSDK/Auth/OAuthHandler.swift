@@ -126,7 +126,8 @@ class OAuthHandler: NSObject {
         }
 
         guard let callback = callback, callback.matches(callbackURL) else {
-            Log.error("Rejected OAuth callback from unexpected URL: \(callbackURL.absoluteString)")
+            let host = callbackURL.host ?? "?"
+            Log.bridge.error("rejected OAuth callback from unexpected URL host=\(host, privacy: .private) path=\(callbackURL.path, privacy: .private)")
             completion?(.failure(OAuthError.invalidCallbackURL(callbackURL.absoluteString)))
             return
         }
