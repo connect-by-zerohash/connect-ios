@@ -29,6 +29,7 @@ final class AutomationSessionViewController:
     private var webView: WKWebView!
     private var didDismiss = false
     private var timeoutTask: Task<Void, Never>?
+    private var readinessTask: Task<Void, Never>?
 
     /// True once the first `didFinish` has fired (initial page load complete).
     private var didLoad = false
@@ -109,6 +110,13 @@ final class AutomationSessionViewController:
     /// `JSException` so messages survive to the platform layer.
     func evaluateAsync(_ js: String, arguments: [String: Any]) async throws -> Any? {
         loadViewIfNeeded()
+        // this session drives money-movement automation (types the destination address,
+        // relays the OTP, clicks "Send now"). Refuse to evaluate if the page has somehow
+        // landed on a non-Coinbase origin, even if a navigation slipped past the delegate.
+        guard CoinbaseHostPolicy.isTrusted(webView.url) else {
+            Log.automation.error("refusing to evaluate automation on untrusted host=\(self.webView.url?.host ?? "?", privacy: .private)")
+            throw JSException(message: "withdraw/untrusted-host")
+        }
         var expr = js
         while let last = expr.unicodeScalars.last,
               last == ";" || CharacterSet.whitespacesAndNewlines.contains(last) {
@@ -183,8 +191,68 @@ final class AutomationSessionViewController:
         dismissSession()
     }
 
+    // Navigation host allowlist. This long-lived session drives the Coinbase
+    // withdrawal automation and carries the live Coinbase session, so it must only
+    // load Coinbase-owned origins in the main frame. Sub-frames (e.g. the
+    // Cloudflare Turnstile widget) are third-party by design and left alone.
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if navigationAction.targetFrame?.isMainFrame == false {
+            decisionHandler(.allow)
+            return
+        }
+        guard CoinbaseHostPolicy.isTrusted(navigationAction.request.url) else {
+            Log.automation.error("blocked off-Coinbase navigation host=\(navigationAction.request.url?.host ?? "?", privacy: .private)")
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        markInitialLoadComplete()
+        beginReadinessGate()
+    }
+
+    /// Truthy while a Cloudflare interstitial/Turnstile is on the page. Markers
+    /// mirror the browser extension's canonical detector (coinbase/challenge.ts)
+    /// and `AutomatedWebViewController.challengeProbe` — keep them in sync.
+    private static let challengeProbe =
+        "(!!(window._cf_chl_opt || document.querySelector('#challenge-running, #cf-challenge-running, #challenge-stage, #cf-chl-widget, iframe[src*=\"challenges.cloudflare.com\"], div[class=\"ch-title-zone\"]')))"
+
+    /// After the first `didFinish`, defer marking the session ready until any
+    /// Cloudflare challenge has cleared. The withdraw page frequently loads behind
+    /// Cloudflare's non-interactive "managed challenge" (a spinner that runs JS
+    /// then reloads to the real page). Evaluating `startWithdrawJS` on that
+    /// challenge page runs the script in a context Cloudflare destroys on the
+    /// reload — so the automation dies and the overlay hangs to timeout. Polling
+    /// the live document (which survives the reload) until the challenge is gone
+    /// keeps us from evaluating too early. No-op once ready or dismissed; the
+    /// non-challenged path resolves on the first poll.
+    private func beginReadinessGate() {
+        guard !didLoad, readinessTask == nil else { return }
+        readinessTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !self.didLoad && !self.didDismiss {
+                var challenged = true
+                do {
+                    let result = try await self.webView.evaluateJavaScript(Self.challengeProbe)
+                    challenged = (result as? Bool) ?? false
+                } catch {
+                    // Page is mid-navigation/reload (typical while Cloudflare
+                    // resolves) — treat as still challenged and keep polling.
+                    challenged = true
+                }
+                if self.didLoad || self.didDismiss { return }
+                if !challenged {
+                    Log.automation.debug("session ready: no Cloudflare challenge; resolving initial load")
+                    self.markInitialLoadComplete()
+                    return
+                }
+                Log.automation.debug("session waiting on Cloudflare challenge to clear…")
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+            }
+        }
     }
 
     /// Flips `didLoad` and resumes any `awaitInitialLoad()` waiters on the first
@@ -204,6 +272,8 @@ final class AutomationSessionViewController:
         didDismiss = true
         timeoutTask?.cancel()
         timeoutTask = nil
+        readinessTask?.cancel()
+        readinessTask = nil
         overlay?.stop()
         // Unblock any awaitInitialLoad() callers so a dismiss/timeout before the
         // first load can't strand them.

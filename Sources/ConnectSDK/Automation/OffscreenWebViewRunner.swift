@@ -115,6 +115,13 @@ final class OffscreenWebViewRunner: NSObject, WKNavigationDelegate {
     /// continuation throws `.navigationLost`.
     private var runGeneration: Int = 0
 
+    /// Whether the navigation host allowlist is enforced for the current run.
+    /// True for remote-URL runs (`_run`) — the money-movement surface, which must
+    /// stay on Coinbase. False for local-HTML runs (`_runHTML`), where we author
+    /// the content ourselves so its nominal baseURL host is not a trust boundary.
+    /// Safe as shared state: runs are serialised (`runSerialised`), never concurrent.
+    private var enforceHostAllowlist = true
+
     /// Serialises concurrent `run`/`runHTML` calls on the same runner.
     /// Implemented as a single-slot async queue so callers wait their turn
     /// without blocking the MainActor.
@@ -183,6 +190,7 @@ final class OffscreenWebViewRunner: NSObject, WKNavigationDelegate {
         runGeneration += 1
         let myGeneration = runGeneration
         Log.runner.debug("[runGen=\(myGeneration)] _run url=\(url.absoluteString, privacy: .private) timeoutMs=\(timeoutMs)")
+        enforceHostAllowlist = true
         let webView = createWebView()
         return try await runWithSettle(
             on: webView,
@@ -206,6 +214,7 @@ final class OffscreenWebViewRunner: NSObject, WKNavigationDelegate {
         runGeneration += 1
         let myGeneration = runGeneration
         Log.runner.debug("[runGen=\(myGeneration)] _runHTML baseURL=\(baseURL.absoluteString, privacy: .private) timeoutMs=\(timeoutMs)")
+        enforceHostAllowlist = false
         let webView = createWebView()
         return try await runWithSettle(
             on: webView,
@@ -560,6 +569,31 @@ final class OffscreenWebViewRunner: NSObject, WKNavigationDelegate {
             Log.runner.error("checkGeneration FAILED current=\(current) expected=\(expected); throwing .navigationLost")
             throw RunnerError.navigationLost
         }
+    }
+
+    // Navigation host allowlist. This offscreen WebView carries the live Coinbase
+    // session and runs the auth.status probe, so it must only load Coinbase-owned
+    // origins in the main frame. Sub-frames (e.g. the Cloudflare Turnstile widget)
+    // are third-party by design and left alone. A cancelled off-Coinbase nav
+    // surfaces as didFailProvisionalNavigation, aborting the run — the safe outcome.
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        // Local-HTML runs author their own content; only remote-URL runs are gated.
+        guard enforceHostAllowlist else {
+            decisionHandler(.allow)
+            return
+        }
+        if navigationAction.targetFrame?.isMainFrame == false {
+            decisionHandler(.allow)
+            return
+        }
+        guard CoinbaseHostPolicy.isTrusted(navigationAction.request.url) else {
+            Log.runner.error("blocked off-Coinbase navigation host=\(navigationAction.request.url?.host ?? "?", privacy: .private)")
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
     }
 
     func webView(_ webView: WKWebView, didFinish nav: WKNavigation!) {

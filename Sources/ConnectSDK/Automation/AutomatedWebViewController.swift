@@ -205,7 +205,7 @@ final class AutomatedWebViewController: UIViewController, WKNavigationDelegate {
     /// is on the page. Evaluated against the LIVE document each poll, so it
     /// keeps working across the reload Cloudflare performs after a solve.
     private static let challengeProbe =
-        "(!!(window._cf_chl_opt || document.querySelector('div[class=\"ch-title-zone\"]')))"
+        "(!!(window._cf_chl_opt || document.querySelector('#challenge-running, #cf-challenge-running, #challenge-stage, #cf-chl-widget, iframe[src*=\"challenges.cloudflare.com\"], div[class=\"ch-title-zone\"]')))"
 
     /// Polls the live page until no Cloudflare challenge is present, then
     /// restores the overlay and evaluates the automation script ONCE. Because
@@ -267,16 +267,25 @@ final class AutomatedWebViewController: UIViewController, WKNavigationDelegate {
 
     // MARK: - Navigation delegate
 
-    // DEBUG instrumentation: log every navigation so we can see redirects
-    // (e.g. to challenges.cloudflare.com or login.coinbase.com) that would keep
-    // `settle` returning `.waitMore`. Implementing this delegate method does not
-    // change behaviour — we always allow, matching the default.
+    // Navigation host allowlist. This WebView carries the live Coinbase session
+    // and injects the balance / deposit-address automation, so it must only load
+    // Coinbase-owned origins in the main frame. Sub-frames (e.g. the Cloudflare
+    // Turnstile widget) are third-party by design and left alone.
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         #if DEBUG
         Log.coinbase.debug("navAction -> \(navigationAction.request.url?.absoluteString ?? "?", privacy: .public)")
         #endif
+        if navigationAction.targetFrame?.isMainFrame == false {
+            decisionHandler(.allow)
+            return
+        }
+        guard CoinbaseHostPolicy.isTrusted(navigationAction.request.url) else {
+            Log.coinbase.error("blocked off-Coinbase navigation host=\(navigationAction.request.url?.host ?? "?", privacy: .private)")
+            decisionHandler(.cancel)
+            return
+        }
         decisionHandler(.allow)
     }
 

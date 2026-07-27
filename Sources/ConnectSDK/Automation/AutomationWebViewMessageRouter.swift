@@ -216,8 +216,18 @@ final class AutomationWebViewMessageRouter: BridgeEventEmitting {
             return .failure(.platformThrew(e.message))
         } catch {
             Log.automation.error("error id=\(req.id, privacy: .public) type=\(String(describing: type(of: error)), privacy: .public)")
-            return .failure(.platformThrew(error.localizedDescription))
+            return .failure(.platformThrew(Self.stripErrorPrefix(error.localizedDescription)))
         }
+    }
+
+    /// WebKit surfaces `throw new Error("code/slug")` as a `WKJavaScriptExceptionMessage`
+    /// of `"Error: code/slug"`. The web-side classifier (`translateScrapingError`)
+    /// extracts the code from the START of the string, so the `"Error: "` prefix makes
+    /// every JS-thrown domain code (e.g. `withdraw/network-unavailable`) fall through to
+    /// the generic "Something went wrong" bucket. Strip it so the code leads the wire string.
+    private static func stripErrorPrefix(_ raw: String) -> String {
+        let prefix = "Error: "
+        return raw.hasPrefix(prefix) ? String(raw.dropFirst(prefix.count)) : raw
     }
 
     private static func encode<T: Encodable>(_ value: T) throws -> JSONValue {
