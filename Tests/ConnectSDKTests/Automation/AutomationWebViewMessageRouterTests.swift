@@ -582,8 +582,11 @@ struct AutomationWebViewMessageRouterDispatchTests {
         #expect(handle.overlayRevealed == nil) // not revealed — host took over
     }
 
-    @Test("start id-verification reveals the Coinbase modal (no step-aside)")
-    func withdrawStartIdVerificationRevealsCoinbase() async {
+    /// ID-verification is the one pause the user resolves inside Coinbase's own UI,
+    /// so the page is revealed rather than stepped aside. Every other pause hands the
+    /// screen to the host. See `WithdrawState.surfacesCoinbase`.
+    @Test("start id-verification reveals the Coinbase page for the user")
+    func withdrawStartIdVerificationRevealsPage() async {
         let handle = MockAutomationSessionHandle()
         let flow = StubWithdrawFlow(
             id: "coinbase",
@@ -594,8 +597,8 @@ struct AutomationWebViewMessageRouterDispatchTests {
 
         await router.dispatch(startReq("W1"))
 
-        #expect(handle.stepAsideCount == 0)
         #expect(handle.overlayRevealed == true)
+        #expect(handle.stepAsideCount == 0)
     }
 
     @Test("continue after a step-aside reclaims the screen (resume)")

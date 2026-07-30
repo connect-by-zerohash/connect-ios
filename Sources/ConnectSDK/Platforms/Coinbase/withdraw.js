@@ -15,13 +15,39 @@
   // Send modal entry + recipient
   var QUICK_ACTION_SEND = '[data-testid="quick-action-send"]';
   var TRANSFER_DROPDOWN_BUTTON = '[data-testid="transfer-dropdown-button"]';
-  var TRANSACTIONS_TAB = 'button[data-testid="Transactions-Tab"]';
   var TRANSFER_DROPDOWN = 'div[class*="cds-dropdown"]';
   var TRANSFER_DROPDOWN_BUTTON_IN_MENU = TRANSFER_DROPDOWN + ' button';
   // Advance mobile: Transactions tab → global-actions CTA → BottomDrawer transfer
   var GLOBAL_ACTIONS_CTA_BUTTON = "div[data-testid='global-actions-cta-wrapper'] button";
   var BOTTOM_DRAWER_BUTTON = "div[class*='BottomDrawer'] button";
+
+  // ── Locale-independent controls ──
+  //
+  // Coinbase localizes its own test IDs and aria-labels on the bottom nav tabs and
+  // the transfer drawer. On a pt-BR account the Transactions tab is
+  // `data-testid="Transações-Tab"`, so the old `[data-testid="Transactions-Tab"]`
+  // matched nothing — 0 occurrences across 318 captured snapshots, against 102 and
+  // 179 for the localized form. That is what produced withdraw/send-trigger-not-found.
+  //
+  // `data-icon-name` is NOT localized and is unique (max one per snapshot for each
+  // of these), so it is the only stable handle. Match the icon, then walk up to the
+  // control that owns it.
+  var ICON_TRANSACTIONS_TAB = "invoice"; // Home is "home", Trading is "trading"
+  var ICON_SEND_CRYPTO = "arrowUp";      // Receive "arrowDown", deposit "bank", cash-out "cash"
   var RECIPIENT_INPUT = '[data-testid="recipient-search-input"]';
+
+  // Recipient dropdown rows. Every row carries the FULL address in its test id, so
+  // match on that, never on rendered text: a starred address renders the contact's
+  // name plus a TRUNCATED address ("Sandro … 9LFUw6...hZUGd2"), and when an address
+  // is starred Coinbase drops the manual row entirely — so the full string appears
+  // nowhere on the screen.
+  var RECIPIENT_MANUAL_ADDRESS = '[data-testid="recipient-manual-address-cell-pressable"]';
+  function favoriteRecipient(addr) {
+    return '[data-testid="favorite-' + addr + '-cell-pressable"]';
+  }
+  function recentRecipient(addr) {
+    return '[data-testid="recent-send-' + addr + '-cell-pressable"]';
+  }
 
   // Conditional recipient-type chooser
   var STEP_SELECT_RECIPIENT_TYPE = '[data-testid="step-selectRecipientType-active"]';
@@ -49,10 +75,20 @@
   var DESTINATION_TAG_INPUT = STEP_DESTINATION_TAG + ' input';
   var SKIP_DESTINATION_TAG = '[data-testid="skip-destination-tag"]';
 
-  // Risk-engine ID/liveness verification (current send)
+  // Risk-engine ID/liveness verification (current send).
+  //
+  // STEP_RISK_VERIFICATION is the container; it holds nested sub-steps. Only the
+  // sub-states below mean the screen has settled — the container can be up while
+  // Coinbase is still rendering into it. Matched by data-testid, never by button
+  // text: the captured account renders these in Portuguese.
   var STEP_RISK_VERIFICATION = '[data-testid="step-riskSelfServeStep-active"]';
-  var RISK_START_ID_CHECK_LABEL = "Start ID check";
-  var RISK_CANCEL_TRANSFER_LABEL = "Cancel transfer";
+  var RISK_START_CHALLENGE = '[data-testid="start-challenge-button"]';
+  var RISK_STEP_IDV = '[data-testid="step-idVerification-active"]';
+  var RISK_IDV_FAILED = '[data-testid="id-capture-reskinned-failure-view"]';
+  // Transient intro frame, rendered before the buttons exist.
+  var RISK_SCAM_INTRO = '[data-testid="scam-warning-intro"]';
+  // Only used by readPendingTransfer, for the separate step-previousTransfer
+  // screen. The risk screen has no such label.
   var RISK_COMPLETE_BEFORE_LABEL = "Complete before";
 
   // "Review pending transfer" — a PRIOR transfer blocking a new send
@@ -92,8 +128,14 @@
   var AMOUNT_ERROR_MESSAGE = '[data-testid="error-message"]';
 
   // 2FA / loading / success
+  //
+  // IDENTITY_ACCESS_WRAPPER mounts EMPTY, inside VERIFY_ACCESS_LOADER, ~1.4s
+  // BEFORE Coinbase's commit request resolves. It is not evidence of anything on
+  // its own — see probePostConfirm.
   var IDENTITY_ACCESS_WRAPPER = '[data-testid="identity-access-view-wrapper"]';
+  var VERIFY_ACCESS_LOADER = '[data-testid="verify_access_loader"]';
   var STATUS_LOADING = '[data-testid="status-animation-loading"]';
+  var STATUS_ANIMATION_SUCCESS = '[data-testid="status-animation-success"]';
   var TWO_FACTOR_TOTP = '[data-testid="two-factor-button-TOTP"]';
   var TWO_FACTOR_SMS = '[data-testid="two-factor-button-SMS"]';
   var PASSKEY_PROMPT = '[data-testid="passkey-auth"], [data-testid="passkey-verify-button"]';
@@ -113,12 +155,16 @@
     STEP_ACTIVE: STEP_ACTIVE,
     QUICK_ACTION_SEND: QUICK_ACTION_SEND,
     TRANSFER_DROPDOWN_BUTTON: TRANSFER_DROPDOWN_BUTTON,
-    TRANSACTIONS_TAB: TRANSACTIONS_TAB,
+    ICON_TRANSACTIONS_TAB: ICON_TRANSACTIONS_TAB,
+    ICON_SEND_CRYPTO: ICON_SEND_CRYPTO,
     TRANSFER_DROPDOWN: TRANSFER_DROPDOWN,
     TRANSFER_DROPDOWN_BUTTON_IN_MENU: TRANSFER_DROPDOWN_BUTTON_IN_MENU,
     GLOBAL_ACTIONS_CTA_BUTTON: GLOBAL_ACTIONS_CTA_BUTTON,
     BOTTOM_DRAWER_BUTTON: BOTTOM_DRAWER_BUTTON,
     RECIPIENT_INPUT: RECIPIENT_INPUT,
+    RECIPIENT_MANUAL_ADDRESS: RECIPIENT_MANUAL_ADDRESS,
+    favoriteRecipient: favoriteRecipient,
+    recentRecipient: recentRecipient,
     STEP_SELECT_RECIPIENT_TYPE: STEP_SELECT_RECIPIENT_TYPE,
     SELF_CUSTODY_OPTION: SELF_CUSTODY_OPTION,
     EXCHANGE_OPTION: EXCHANGE_OPTION,
@@ -132,8 +178,10 @@
     DESTINATION_TAG_INPUT: DESTINATION_TAG_INPUT,
     SKIP_DESTINATION_TAG: SKIP_DESTINATION_TAG,
     STEP_RISK_VERIFICATION: STEP_RISK_VERIFICATION,
-    RISK_START_ID_CHECK_LABEL: RISK_START_ID_CHECK_LABEL,
-    RISK_CANCEL_TRANSFER_LABEL: RISK_CANCEL_TRANSFER_LABEL,
+    RISK_START_CHALLENGE: RISK_START_CHALLENGE,
+    RISK_STEP_IDV: RISK_STEP_IDV,
+    RISK_IDV_FAILED: RISK_IDV_FAILED,
+    RISK_SCAM_INTRO: RISK_SCAM_INTRO,
     RISK_COMPLETE_BEFORE_LABEL: RISK_COMPLETE_BEFORE_LABEL,
     STEP_PREVIOUS_TRANSFER: STEP_PREVIOUS_TRANSFER,
     PENDING_AMOUNT_LABEL: PENDING_AMOUNT_LABEL,
@@ -160,7 +208,9 @@
     SEND_PREVIEW_FEE: SEND_PREVIEW_FEE,
     AMOUNT_ERROR_MESSAGE: AMOUNT_ERROR_MESSAGE,
     IDENTITY_ACCESS_WRAPPER: IDENTITY_ACCESS_WRAPPER,
+    VERIFY_ACCESS_LOADER: VERIFY_ACCESS_LOADER,
     STATUS_LOADING: STATUS_LOADING,
+    STATUS_ANIMATION_SUCCESS: STATUS_ANIMATION_SUCCESS,
     TWO_FACTOR_TOTP: TWO_FACTOR_TOTP,
     TWO_FACTOR_SMS: TWO_FACTOR_SMS,
     PASSKEY_PROMPT: PASSKEY_PROMPT,
@@ -253,21 +303,6 @@
     }, timeoutMs, "withdraw/button-not-found: " + text);
   }
 
-  // Poll for a leaf element whose trimmed text exactly equals `text` (the
-  // recipient dropdown renders the pasted address as an item).
-  function waitForExactText(text, timeoutMs) {
-    var want = String(text).trim();
-    return pollUntil(function () {
-      var all = document.querySelectorAll("*");
-      for (var i = 0; i < all.length; i++) {
-        if (all[i].children.length === 0 && (all[i].textContent || "").trim() === want) {
-          return all[i];
-        }
-      }
-      return null;
-    }, timeoutMs, "withdraw/exact-text-not-found: " + text);
-  }
-
   function humanDelay(ms) { return D.sleep(ms || 0); }
   function humanClick(el) { D.realisticClick(el); return D.sleep(50); }
 
@@ -325,19 +360,47 @@
   // Desktop shows a direct "Send" quick-action; mobile collapses it into a
   // "Transfer" dropdown; Coinbase Advance uses a two-click dropdown. Detect
   // which UI is active, then click through to the recipient field.
-  async function openSendModal() {
-    var trigger = await pollUntil(function () {
-      return queryVisible(SEL.QUICK_ACTION_SEND)
-        || queryVisible(SEL.TRANSFER_DROPDOWN_BUTTON)
-        || queryVisible(SEL.TRANSACTIONS_TAB)
-        || D.findButtonByText("Transfer");
-    }, 15000, "withdraw/send-trigger-not-found");
+  // First VISIBLE control owning an icon named `iconName`, or null. Used where
+  // Coinbase localizes the test ID and the icon is the only stable handle.
+  function iconControl(iconName) {
+    var icons = document.querySelectorAll('[data-icon-name="' + iconName + '"]');
+    for (var i = 0; i < icons.length; i++) {
+      // `closest` rather than a CSS `:has()` selector — `:has()` needs Safari
+      // 15.4+, and depending on it here would raise the SDK's minimum iOS.
+      var control = icons[i].closest('button, [role="button"], a');
+      if (control && isVisible(control)) return control;
+    }
+    return null;
+  }
 
-    // The Advance UI surfaces either the transfer dropdown directly or, on
-    // mobile, a Transactions tab that must be opened first — openSendModalAdvance
-    // handles the tab. The standard UI shows the quick-action "Send"/"Transfer".
-    if (trigger.getAttribute("data-testid") === "transfer-dropdown-button"
-        || trigger.getAttribute("data-testid") === "Transactions-Tab") {
+  function transactionsTab() { return iconControl(SEL.ICON_TRANSACTIONS_TAB); }
+  function sendCryptoDrawerItem() { return iconControl(SEL.ICON_SEND_CRYPTO); }
+
+  // Resolve however this layout starts a send, tagging WHICH route it implies.
+  //
+  // The route must be carried out of here, not re-derived by the caller. The old
+  // code re-read `getAttribute("data-testid")` and compared it to the literal
+  // "Transactions-Tab" — localized, so even a tab found by icon would have been
+  // routed to the standard path and then failed looking for a quick-action.
+  //
+  // Returns null while nothing matches, so the caller can keep polling.
+  function findSendTrigger() {
+    var el = queryVisible(SEL.QUICK_ACTION_SEND);
+    if (el) return { el: el, advance: false };
+    el = queryVisible(SEL.TRANSFER_DROPDOWN_BUTTON);
+    if (el) return { el: el, advance: true };
+    el = transactionsTab();
+    if (el) return { el: el, advance: true };
+    // Legacy English-only fallback, kept for layouts we have no capture of. It
+    // cannot match a localized UI — that is what the icon lookups above are for.
+    el = D.findButtonByText("Transfer");
+    if (el) return { el: el, advance: false };
+    return null;
+  }
+
+  async function openSendModal() {
+    var trigger = await pollUntil(findSendTrigger, 15000, "withdraw/send-trigger-not-found");
+    if (trigger.advance) {
       await openSendModalAdvance();
     } else {
       await openSendModalStandard();
@@ -365,14 +428,23 @@
   }
 
   async function openSendModalAdvance() {
-    var transactionsTab = queryVisible(SEL.TRANSACTIONS_TAB);
-    await humanClick(transactionsTab);
+    // The send CTA is unreliable on /home — present in 33 of 38 snapshots in one
+    // capture and 0 of 8 in the other — but reliable on /transactions (171 of 173).
+    // So go via the tab when it is there. Skip it when it is not: the layout that
+    // exposes the transfer dropdown directly has no tab, and clicking null throws.
+    var tab = transactionsTab();
+    if (tab) await humanClick(tab);
     var dropdownBtn = await waitForElement(SEL.GLOBAL_ACTIONS_CTA_BUTTON, 5000);
     await humanClick(dropdownBtn);
-    // Wait for the first button to appear, then settle before querying all.
-    var transferButton = await waitForElement(SEL.BOTTOM_DRAWER_BUTTON);
+    // Wait for the drawer to mount, then settle before picking an item.
+    await waitForElement(SEL.BOTTOM_DRAWER_BUTTON);
     await humanDelay(200);
-    await humanClick(transferButton);
+    // Pick "Send crypto" by icon. Taking the drawer's first button — as this used
+    // to — is right only by ordering luck: "Receive crypto" is one position away,
+    // and every item's label is localized.
+    var sendItem = sendCryptoDrawerItem() || queryVisible(SEL.BOTTOM_DRAWER_BUTTON);
+    if (!sendItem) throw new Error("withdraw/send-crypto-item-not-found");
+    await humanClick(sendItem);
     await awaitRecipientOrPendingBlock();
   }
 
@@ -416,12 +488,30 @@
     }
   }
 
+  // The dropdown row that submits `address`, or null while none is offered.
+  //
+  // Prefer a row whose test id CONTAINS the address: that is self-verifying, so it
+  // cannot submit anything else. The manual row is the fallback for an address with
+  // no history — its id names no address, so it only tells us "whatever is typed".
+  //
+  // A row for a DIFFERENT address is never acceptable. Coinbase lists other
+  // contacts and recents alongside ours, and clicking one of those would send to
+  // the wrong destination.
+  function recipientRow(address) {
+    return queryVisible(SEL.favoriteRecipient(address))
+      || queryVisible(SEL.recentRecipient(address))
+      || queryVisible(SEL.RECIPIENT_MANUAL_ADDRESS);
+  }
+
   async function enterRecipient(address) {
     var input = await waitForElement(SEL.RECIPIENT_INPUT, 15000);
     await typeLikeHuman(input, address);
-    // Dropdown renders async; wait for the item by its address text, then click.
-    var item = await waitForExactText(address, 15000);
-    await humanClick(item);
+    // The dropdown renders async. Match by test id rather than by rendered text —
+    // see recipientRow, and RECIPIENT_MANUAL_ADDRESS's comment for why text
+    // matching cannot work for a starred address.
+    var row = await pollUntil(function () { return recipientRow(address); },
+                             15000, "withdraw/recipient-row-not-found: " + address);
+    await humanClick(row);
   }
 
   // Coinbase keeps the previous step container mounted during fade; `notStep`
@@ -835,11 +925,6 @@
     return null;
   }
 
-  function parseRiskCompleteBefore() {
-    var step = queryVisible(SEL.STEP_RISK_VERIFICATION);
-    return step ? readLabeledValue(step, SEL.RISK_COMPLETE_BEFORE_LABEL) : null;
-  }
-
   function isOtpScreen() {
     return !!(queryVisible(SEL.OTP_INPUT) || queryVisible(SEL.OTP_CONTAINER) ||
               queryVisible(SEL.TWO_FACTOR_TOTP) || queryVisible(SEL.TWO_FACTOR_SMS));
@@ -879,34 +964,15 @@
     return false;
   }
 
-  // Race success vs the various 2FA UIs (30s). Returns a TwoFaOutcome:
+  // Settle the post-confirm state (30s budget). Returns
   // { kind: "none" | "otp" | "passkey" | "processing" | "canceled" |
-  //   "id-verification" (+ completeBefore) }.
+  //   "id-verification", settled: true }.
   async function detectAndHandle2fa() {
-    var ANY_UI = [
-      SEL.SEND_SUCCESS, SEL.STATUS_COMPLETE_BTN, SEL.IDENTITY_ACCESS_WRAPPER,
-      SEL.STATUS_LOADING, SEL.TWO_FACTOR_TOTP, SEL.TWO_FACTOR_SMS,
-      SEL.PASSKEY_PROMPT, SEL.STEP_RISK_VERIFICATION, SEL.STEP_USER_CANCELLATION
-    ];
-    var which = await waitForAny(ANY_UI, 30000);
-    if (wasTransferCanceled()) return { kind: "canceled" };
-    if (!which) {
-      if (past2fa()) return { kind: "none" };
-      throw new Error("withdraw/unknown-failure: neither success nor 2FA UI appeared");
-    }
-    if (past2fa()) return { kind: "none" };
-    if (which === SEL.STEP_RISK_VERIFICATION || queryVisible(SEL.STEP_RISK_VERIFICATION)) {
-      return { kind: "id-verification", completeBefore: parseRiskCompleteBefore() };
-    }
-    await D.sleep(1500); // let the modal settle before inspecting buttons
-    if (past2fa()) return { kind: "none" };
-    if (queryVisible(SEL.STEP_RISK_VERIFICATION)) {
-      return { kind: "id-verification", completeBefore: parseRiskCompleteBefore() };
-    }
-    if (chooseOtpMethod()) return { kind: "otp" };
-    if (queryVisible(SEL.PASSKEY_PROMPT)) return { kind: "passkey" };
-    if (isOtpScreen()) return { kind: "otp" };
-    return { kind: "processing" };
+    var outcome = await settlePostConfirm(30000);
+    // Coinbase may show a method chooser rather than a code field. Picking SMS or
+    // TOTP is a click, so it stays out of the pure classifier.
+    if (outcome.kind === "otp") chooseOtpMethod();
+    return outcome;
   }
 
   // No network interceptor (deferred) — read the outcome from the success screen.
@@ -945,11 +1011,148 @@
       // ceremony and Coinbase offered no code alternative. Reject (terminal) so the
       // host can tell the user to enable SMS/authenticator 2FA.
       case "passkey": return { state: "rejected", reason: "passkey_unsupported" };
+      // completeBefore is always null: the risk screen carries no deadline label.
+      // Coinbase's commit response has `delayedSendDate`, which needs a network
+      // interceptor this design does not build.
       case "id-verification":
-        return { state: "awaiting-user-action", kind: "id-verification", details: details, completeBefore: outcome.completeBefore };
+        return { state: "awaiting-user-action", kind: "id-verification", details: details, completeBefore: null };
       case "processing": return { state: "processing", details: details };
       default: throw new Error("withdraw/unreachable-2fa-kind: " + outcome.kind);
     }
+  }
+
+  // ── Post-confirm classification ──
+  //
+  // probePostConfirm() performs every DOM read. classifyPostConfirm() is pure, so
+  // the precedence rules are unit-testable without a browser
+  // (Tests/JSTests/Coinbase/withdraw-classify.test.mjs).
+  //
+  // "Keep waiting" is the absence of a decisive signal rather than an explicit
+  // list of transitional ones. Coinbase renders several containers (the empty
+  // identity-access wrapper, the verify-access spinner, the scam-warning intro)
+  // that appear BEFORE the outcome is knowable; deciding on any of them WHILE THE
+  // BUDGET REMAINS is the bug this replaces. Once the budget expires the classifier
+  // must produce an answer regardless of what is on screen — see tier 2 below.
+  //
+  // Both factories return a FRESH object. Returning a shared constant for the
+  // "keep waiting" case would let one caller's stray write poison every later
+  // classification, and this file is not in strict mode, so that write would
+  // succeed silently.
+
+  function probePostConfirm() {
+    var idAccess = queryVisible(SEL.IDENTITY_ACCESS_WRAPPER);
+    return {
+      userCancellation: !!queryVisible(SEL.STEP_USER_CANCELLATION),
+      riskStep: !!queryVisible(SEL.STEP_RISK_VERIFICATION),
+      startChallenge: !!queryVisible(SEL.RISK_START_CHALLENGE),
+      stepIdVerification: !!queryVisible(SEL.RISK_STEP_IDV),
+      idvFailed: !!queryVisible(SEL.RISK_IDV_FAILED),
+      scamIntro: !!queryVisible(SEL.RISK_SCAM_INTRO),
+      // Named for the field but covers the CONTAINER too, matching isOtpScreen().
+      // Newer Coinbase builds render one input per digit inside
+      // code-inputs-container; older builds use a single #one-time-code field.
+      otpInput: !!(queryVisible(SEL.OTP_INPUT) || queryVisible(SEL.OTP_CONTAINER)),
+      twoFactorSms: !!queryVisible(SEL.TWO_FACTOR_SMS),
+      twoFactorTotp: !!queryVisible(SEL.TWO_FACTOR_TOTP),
+      passkeyPrompt: !!queryVisible(SEL.PASSKEY_PROMPT),
+      success: !!(queryVisible(SEL.SEND_SUCCESS) || queryVisible(SEL.SUCCESS_HEADLINE) ||
+                  queryVisible(SEL.STATUS_ANIMATION_SUCCESS) || queryVisible(SEL.STATUS_COMPLETE_BTN)),
+      // The subset that says, in words, that the send went through: the success
+      // panel and its "Você enviou 1,87 USDC" headline. The other two markers are
+      // weaker — status-step-complete-button is a generic status-step "Done"
+      // control, and status-animation-success appears in none of the 318 captured
+      // snapshots — so only these are trusted to overrule a known hold. See the
+      // success branch in classifyPostConfirm.
+      successConfirmed: !!(queryVisible(SEL.SEND_SUCCESS) || queryVisible(SEL.SUCCESS_HEADLINE)),
+      verifyAccessLoader: !!queryVisible(SEL.VERIFY_ACCESS_LOADER),
+      // TRUE means "present but empty" — still transitioning. A populated wrapper
+      // holds a real 2FA view, which the otp/passkey fields above pick up.
+      identityAccessWrapper: !!idAccess && idAccess.children.length === 0,
+      statusLoading: !!queryVisible(SEL.STATUS_LOADING),
+      stepLoaded: readActiveStep() === "loaded",
+      overlay: !!queryVisible(SEL.MODAL_OVERLAY),
+      // Set by settlePostConfirm, not read from the DOM.
+      budgetExpired: false,
+      sawIdVerification: !!moduleState().sawIdVerification
+    };
+  }
+
+  function decide(kind) { return { kind: kind, settled: true }; }
+  function keepWaiting() { return { kind: null, settled: false }; }
+
+  // The ladder has two tiers, and only the first is inherited.
+  //
+  // TIER 1 — decisive signals. Not invented: it reproduces what past2fa() and
+  // activeGate() already composed to.
+  //
+  //   past2fa    : wasTransferCanceled() -> activeGate() -> SEND_SUCCESS
+  //   activeGate : risk -> isOtpScreen() -> passkey
+  //   compose    : cancel > risk > otp > passkey > success
+  //
+  // TIER 2 — budget-expiry resolution, reached only when tier 1 found nothing.
+  // This part is NEW; the legacy code had no notion of a budget, which is why it
+  // decided on transitional containers. Order: sticky hold > modal-gone > still up.
+  // Derived from exploration capture d9d96c27, not from the legacy functions.
+  //
+  // Two tier-1 properties are load-bearing, both pinned by tests:
+  //  - a live GATE outranks a success screen. Reporting a completed send while a
+  //    gate is up is the failure this work removes; a stale gate self-corrects on
+  //    the next poll.
+  //  - a typed-code method outranks a passkey. Passkey maps to the TERMINAL
+  //    passkey_unsupported, so the wrong order strands a user who had SMS
+  //    available. This deliberately overrides detectAndHandle2fa's old order,
+  //    which ranked passkey above a bare code field because chooseOtpMethod()
+  //    only ever matched the SMS/TOTP buttons.
+  function classifyPostConfirm(p) {
+    if (p.userCancellation) return decide("canceled");
+    if (p.riskStep && (p.startChallenge || p.stepIdVerification || p.idvFailed)) {
+      return decide("id-verification");
+    }
+    if (p.otpInput || p.twoFactorSms || p.twoFactorTotp) return decide("otp");
+    if (p.passkeyPrompt) return decide("passkey");
+    // A session that has already reported a hold needs UNAMBIGUOUS evidence before
+    // it may report success. If Coinbase states the send went through, believe it —
+    // arguing with that would strand a completed transfer. But the weaker markers
+    // must not overrule a known hold: the same asymmetry as everywhere else here, a
+    // wrong hold self-corrects on the next poll, a wrong success loses the send.
+    if (p.success && (!p.sawIdVerification || p.successConfirmed)) return decide("none");
+    // No decisive signal. Keep waiting unless the clock has run out — past that
+    // point every branch below MUST settle, or settlePostConfirm has no answer.
+    if (!p.budgetExpired) return keepWaiting();
+    // A session that already reported a hold can NEVER resolve to success here.
+    // Coinbase's risk screen does not advance when the check clears elsewhere
+    // (capture d9d96c27), so a vanished screen means we lost track of a held
+    // send, not that it went through.
+    if (p.sawIdVerification) return decide("id-verification");
+    // Last resort: the send modal is gone and no success screen ever rendered.
+    // Coinbase closes the modal on some success variants, so treat it as done.
+    if (!p.overlay) return decide("none");
+    return decide("processing");
+  }
+
+  // Record a hold so every later poll inherits it. See classifyPostConfirm's
+  // sawIdVerification guard.
+  function rememberOutcome(outcome) {
+    if (outcome.kind === "id-verification") moduleState().sawIdVerification = true;
+    return outcome;
+  }
+
+  // Poll until a decisive signal appears, then classify. On budget exhaustion,
+  // classify once more with budgetExpired so a decision is always produced.
+  //
+  // Replaces a fixed `sleep(1500)`, which landed between Coinbase unmounting the
+  // 2FA loader and mounting the risk screen and so decided on neither.
+  async function settlePostConfirm(budgetMs) {
+    var deadline = Date.now() + (budgetMs || 0);
+    for (;;) {
+      var outcome = classifyPostConfirm(probePostConfirm());
+      if (outcome.settled) return rememberOutcome(outcome);
+      if (Date.now() >= deadline) break;
+      await D.sleep(250);
+    }
+    var last = probePostConfirm();
+    last.budgetExpired = true;
+    return rememberOutcome(classifyPostConfirm(last));
   }
 
   // ── OTP / poll (continue path) ──
@@ -993,6 +1196,11 @@
   async function enterOtp(code) {
     await waitForAny([SEL.OTP_INPUT, SEL.OTP_CONTAINER, SEL.IDENTITY_ACCESS_WRAPPER], 15000);
     if (past2fa()) return true;
+    // Coinbase may still be showing the method chooser rather than a code field.
+    // The poll that reported `otp` already tried to pick a method, but it runs
+    // without the page presented, so don't depend on that click having landed —
+    // otherwise waitForElement below burns 15s and throws.
+    if (!queryVisible(SEL.OTP_INPUT) && chooseOtpMethod()) await D.sleep(300);
     var input = await waitForElement(SEL.OTP_INPUT, 15000);
     fillOtpCode(input, code);
     await D.sleep(300);
@@ -1007,33 +1215,6 @@
       await D.sleep(500);
     }
     throw new Error("withdraw/otp-timeout: Coinbase didn't accept or reject the code");
-  }
-
-  // Short poll for continue({kind:"poll"}).
-  async function pollFor2faResolution() {
-    var deadline = Date.now() + 10000;
-    while (Date.now() < deadline) {
-      if (wasTransferCanceled()) return "canceled";
-      if (past2fa()) return "submitted";
-      if (queryVisible(SEL.STEP_RISK_VERIFICATION)) return "id-verification";
-      if (chooseOtpMethod()) return "otp";
-      if (isOtpScreen()) return "otp";
-      if (queryVisible(SEL.PASSKEY_PROMPT)) return "passkey";
-      await D.sleep(500);
-    }
-    return "processing";
-  }
-
-  // Click "Cancel transfer" on the risk step. true if found+clicked, false if the
-  // step isn't up (e.g. already verified/cancelled in the UI).
-  async function clickCancelTransfer() {
-    var step = queryVisible(SEL.STEP_RISK_VERIFICATION);
-    if (!step) return false;
-    var btn = await waitForButtonByText(SEL.RISK_CANCEL_TRANSFER_LABEL, { root: step, timeoutMs: 500 })
-      .catch(function () { return null; });
-    if (!btn) return false;
-    await humanClick(btn);
-    return true;
   }
 
   // ─── Entry points ───────────────────────────────────────────────────
@@ -1090,22 +1271,40 @@
       }
 
       if (payload.kind === "poll") {
-        if (wasTransferCanceled()) return { state: "rejected", reason: "transfer_canceled" };
-        if (past2fa()) return await finalizeSubmitted(details);
-        var next = await pollFor2faResolution();
-        if (next === "canceled") return { state: "rejected", reason: "transfer_canceled" };
-        if (next === "submitted") return await finalizeSubmitted(details);
-        if (next === "processing") return { state: "processing", details: details };
-        if (next === "otp") return { state: "awaiting-input", kind: "otp", details: details };
-        if (next === "passkey") return { state: "rejected", reason: "passkey_unsupported" }; // passkey not supported (see toState)
-        return { state: "awaiting-user-action", kind: "id-verification", details: details, completeBefore: parseRiskCompleteBefore() };
+        // Same classifier as `start`, shorter budget — so the two cannot drift.
+        // Parked at id-verification this returns id-verification every time:
+        // Coinbase's risk screen does not advance when the check clears in
+        // another app, and zerohash's own systems report the final disposition.
+        var polled = await settlePostConfirm(10000);
+        if (polled.kind === "otp") chooseOtpMethod();
+        if (polled.kind === "none") return await finalizeSubmitted(details);
+        return toState(polled, details);
       }
 
       throw new Error("withdraw/invalid-payload: unknown kind");
     },
-    // Click Coinbase's "Cancel transfer"; reports whether it was found and clicked.
+    // Teardown only — never aborts the transfer at Coinbase.
+    //
+    // The coordinator dismisses the WebView unconditionally
+    // (WithdrawCoordinator.swift:138-145), so this needs to do nothing. It
+    // deliberately does NOT click Coinbase's cancel button: the only screen that
+    // has one is the risk screen, and that is exactly when the user has been sent
+    // to the Coinbase app to finish the identity check. Closing the host modal
+    // fires withdraw.cancel, so clicking would throw away the held transfer.
     cancel: async function () {
-      return { cancelled: await clickCancelTransfer() };
+      return { cancelled: false };
+    },
+    // Test seam. Consumed only by Tests/JSTests/Coinbase; nothing in the SDK
+    // reads it. SEL is exposed so the test harness never has to duplicate a
+    // selector string — a duplicate can drift, and drift here fails silently.
+    __internals: {
+      SEL: SEL,
+      recipientRow: recipientRow,
+      findSendTrigger: findSendTrigger,
+      sendCryptoDrawerItem: sendCryptoDrawerItem,
+      classifyPostConfirm: classifyPostConfirm,
+      probePostConfirm: probePostConfirm,
+      settlePostConfirm: settlePostConfirm
     }
   };
 })();

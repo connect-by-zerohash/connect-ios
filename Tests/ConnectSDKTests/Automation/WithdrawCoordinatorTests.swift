@@ -117,4 +117,88 @@ struct WithdrawCoordinatorTests {
 
         #expect(flow.startCount == 2)
     }
+
+    /// Parks a session at `parked`, then runs one `continue` and reports what the
+    /// coordinator did to the screen. Used to check that polling a parked session
+    /// does not re-present Coinbase's page.
+    @MainActor
+    private func park(
+        at parked: WithdrawState,
+        thenContinueWith payload: ContinueWithdrawPayload
+    ) async throws -> MockAutomationSessionHandle {
+        let coordinator = WithdrawCoordinator()
+        let ctx = MockExecutionContext()
+        let handle = MockAutomationSessionHandle()
+        let flow = GatedStartFlow(handle: handle, startState: parked)
+
+        let start = Task { @MainActor in
+            try await coordinator.start(platform: flow, ctx: ctx, payload: Self.payload(),
+                                        overlay: .default, showOverlay: false)
+        }
+        await flow.waitUntilEntered()
+        flow.release()
+        let (_, sessionId) = try await start.value
+
+        _ = try await coordinator.continue(platform: flow, sessionId: sessionId, payload: payload)
+        return handle
+    }
+
+    /// The host polls a parked id-verification every few seconds. Re-presenting the
+    /// WebView to read the DOM made Coinbase's risk page flash open and shut on that
+    /// cadence — a visible loop, on a screen the user has been told to leave alone.
+    ///
+    /// A poll only reads (`probePostConfirm` queries, it does not click), and
+    /// `stepAside` keeps the WebView alive, so no presentation is needed.
+    @Test("polling a parked id-verification never re-presents Coinbase's page")
+    func pollDoesNotRepresentThePage() async throws {
+        let handle = try await park(
+            at: .awaitingUserActionIdVerification(details: Self.details, completeBefore: nil),
+            thenContinueWith: .poll)
+
+        // The page stays exactly as the user left it: not dismissed, not re-presented,
+        // and still revealed. Re-presenting is what made it flash on every poll.
+        #expect(handle.resumeCount == 0)
+        #expect(handle.stepAsideCount == 0)
+        #expect(handle.overlayRevealed == true)
+        #expect(handle.restartTimeoutCount == 1)  // still gets a fresh budget
+    }
+
+    /// The counterpart: submitting a code has to type into the page, so it must be
+    /// on screen. Skipping presentation for everything would break OTP entry.
+    @Test("submitting an OTP does re-present the page, because it types into it")
+    func otpRepresentsThePage() async throws {
+        let handle = try await park(at: .awaitingInputOtp(details: Self.details),
+                                   thenContinueWith: .otp(code: "123456"))
+
+        #expect(handle.resumeCount == 1)
+        #expect(handle.restartTimeoutCount == 1)
+    }
+
+    /// The user completes Coinbase's identity check in place, so the page must be
+    /// revealed — not stepped aside. Coinbase renders that flow itself (no
+    /// third-party frame in any captured snapshot) and the SDK grants camera capture
+    /// for Coinbase origins, so it can run here.
+    @Test("id-verification reveals the page so the user can do the check in place")
+    func idVerificationRevealsThePage() async throws {
+        let coordinator = WithdrawCoordinator()
+        let ctx = MockExecutionContext()
+        let handle = MockAutomationSessionHandle()
+        let flow = GatedStartFlow(
+            handle: handle,
+            startState: .awaitingUserActionIdVerification(
+                details: Self.details, completeBefore: nil))
+
+        let task = Task { @MainActor in
+            try await coordinator.start(platform: flow, ctx: ctx,
+                                        payload: Self.payload(), overlay: .default,
+                                        showOverlay: false)
+        }
+        await flow.waitUntilEntered()
+        flow.release()
+        _ = try await task.value
+
+        #expect(handle.overlayRevealed == true) // Coinbase's page is on screen
+        #expect(handle.stepAsideCount == 0)     // and was not dismissed
+        #expect(handle.pauseTimeoutCount == 1)  // the wait is unbounded
+    }
 }
