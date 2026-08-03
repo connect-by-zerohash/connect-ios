@@ -22,7 +22,12 @@ public struct ConnectAllowList: Sendable, Equatable {
     }
 
     /// The default allow-list shipped with the SDK.
-    public static let `default` = ConnectAllowList(hosts: ["connect.xyz", "zerohash.com"])
+    public static let `default` = ConnectAllowList(hosts: [
+        "connect.xyz",
+        "zerohash.com",
+        "gemini.com",
+        "robinhood.com",
+    ])
 
     /// Returns `true` if `host` is permitted under this allow-list.
     public func contains(host: String) -> Bool {
