@@ -107,7 +107,8 @@ let oauthCallback = ConnectOAuthCallback(
 ### (Optional) Configure the host allow-list
 
 The SDK ships with a built-in allow-list that permits navigations and
-resource loads to `connect.xyz`, `zerohash.com`, and their subdomains.
+resource loads to `connect.xyz`, `zerohash.com`, `gemini.com`,
+`robinhood.com`, and their subdomains.
 You can supply your own list — for example to add a host that hosts your
 Universal Link, or to limit the SDK to a subset of hosts — via
 `ConnectAllowList`. Host matching is exact or via dot-suffix subdomain.
@@ -680,3 +681,39 @@ appearance.
 For additional support or questions about the Connect platform:
 - [Technical Support](https://zerohash.com/)
 - [Documentation](https://docs.zerohash.com/docs/connect)
+
+## Contributing
+
+### Versioning
+
+ConnectSDK follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
+
+- **MAJOR** (e.g. `2.0.0`) — breaking changes that require consumers to update
+  their integration.
+- **MINOR** (e.g. `1.1.0`) — new functionality that is backwards compatible;
+  existing integrations keep working without changes.
+- **PATCH** (e.g. `1.0.1`) — backwards-compatible bug fixes only.
+
+Record every notable change in [`CHANGELOG.md`](CHANGELOG.md) under the version
+it ships in.
+
+### Publishing a release
+
+Swift Package Manager resolves releases from **Git version tags**, not from
+branches — merging to `main` does not publish a new version on its own. A new
+version becomes available to consumers only once it is tagged:
+
+1. Make sure the changes are merged to `main` and `CHANGELOG.md` has an entry
+   for the new version.
+2. Choose the next version number following Semantic Versioning above.
+3. Tag the commit with the bare version number (**no `v` prefix**) and push the
+   tag:
+
+   ```bash
+   git checkout main && git pull
+   git tag -a 1.1.0 -m "Release 1.1.0"
+   git push origin 1.1.0
+   ```
+
+4. Once the tag is published, consumers on a version rule such as
+   `from: "1.0.0"` pick up the release on their next package resolve/update.
