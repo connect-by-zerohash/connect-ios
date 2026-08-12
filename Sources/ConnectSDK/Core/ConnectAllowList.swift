@@ -27,6 +27,13 @@ public struct ConnectAllowList: Sendable, Equatable {
         "zerohash.com",
         "gemini.com",
         "robinhood.com",
+        // Dynamic powers the self-custody wallet list and connect flow; these
+        // cover its API, logging, WalletConnect relay, and wallet assets.
+        "dynamicauth.com",
+        "dynamic-static-assets.com",
+        "dynamic.xyz",
+        // TON Connect wallet registry, required for TON wallets.
+        "ton.org",
     ])
 
     /// Returns `true` if `host` is permitted under this allow-list.

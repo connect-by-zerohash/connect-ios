@@ -107,9 +107,17 @@ struct ConnectAllowListTests {
     func defaultListContents() {
         // Regression guard: the AUTH-3864 exchange hosts (Gemini/Robinhood)
         // must stay in the default list alongside the SDK web-shell hosts.
-        let expected = ["connect.xyz", "zerohash.com", "gemini.com", "robinhood.com"]
+        let expected = [
+            "connect.xyz", "zerohash.com", "gemini.com", "robinhood.com",
+            "dynamicauth.com", "dynamic-static-assets.com", "dynamic.xyz", "ton.org",
+        ]
         for host in expected {
             #expect(ConnectAllowList.default.hosts.contains(host), "missing default host: \(host)")
         }
+
+        // Dynamic serves from subdomains (app./logs./relay.), which the
+        // dot-suffix match must cover from the base-domain entry.
+        #expect(ConnectAllowList.default.contains(host: "app.dynamicauth.com"))
+        #expect(ConnectAllowList.default.contains(host: "config.ton.org"))
     }
 }
