@@ -55,20 +55,26 @@ final class NativeIOSMessageHandler: NSObject, WKScriptMessageHandler {
         }
 
         if MessageBodyDecoder.isAutomationWebViewRequest(parsed) {
+            let id = parsed["id"] as? String ?? "-"
+            let platform = parsed["platform"] as? String ?? "-"
+            let op = parsed["operation"] as? String ?? "-"
+
+            Log.bridge.notice("inbound automation envelope id=\(id, privacy: .public) platform=\(platform, privacy: .public) op=\(op, privacy: .public) origin=\(host, privacy: .public)")
+
             guard let req = try? JSONDecoder().decode(ZeroAuthRequest.self, from: bodyData) else {
-                // Malformed envelope: route to AutomationWebView error path so the JS side gets a structured reply.
                 Log.bridge.error("automation envelope failed to decode; routing to invalidEnvelopeProbe")
                 Task { await self.automationWebView.dispatch(.invalidEnvelopeProbe()) }
                 return
             }
-            Log.bridge.debug("inbound automation envelope id=\(req.id, privacy: .public) platform=\(req.platform, privacy: .public) op=\(req.operation, privacy: .public) origin=\(host, privacy: .private)")
             Task { await self.automationWebView.dispatch(req) }
             return
         }
 
         let jsonString = String(data: bodyData, encoding: .utf8) ?? ""
         let msgType = parsed["type"] as? String ?? "?"
-        Log.bridge.debug("inbound UIWebView msg type=\(msgType, privacy: .public) origin=\(host, privacy: .private)")
+
+        Log.bridge.notice("inbound common envelope op=\(msgType, privacy: .public) origin=\(host, privacy: .public)")
+
         uiWebView.handle(jsonObject: parsed, jsonString: jsonString)
     }
 }

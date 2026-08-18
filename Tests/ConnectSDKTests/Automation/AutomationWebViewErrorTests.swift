@@ -22,4 +22,19 @@ struct AutomationWebViewErrorTests {
         #expect(AutomationWebViewError.cancelled.retryable == false)
         #expect(AutomationWebViewError.invalidEnvelope.retryable == false)
     }
+
+    @Test("transient runner failures are retryable")
+    func transientRunnerFailuresRetryable() {
+        #expect(AutomationWebViewError.platformThrew("timeout: navigationSettle").retryable == true)
+        #expect(AutomationWebViewError.platformThrew("timeout: initialLoad").retryable == true)
+        #expect(AutomationWebViewError.platformThrew("loadFailed: offline").retryable == true)
+        #expect(AutomationWebViewError.platformThrew("navigationLost").retryable == true)
+        #expect(AutomationWebViewError.platformThrew("hostUnavailable").retryable == true)
+    }
+
+    @Test("platform-shape failures stay non-retryable")
+    func shapeFailuresNotRetryable() {
+        #expect(AutomationWebViewError.platformThrew("invalid JS return").retryable == false)
+        #expect(AutomationWebViewError.platformThrew("asset_not_available:SOL visible=[BTC]").retryable == false)
+    }
 }

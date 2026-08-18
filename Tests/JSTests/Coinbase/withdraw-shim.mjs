@@ -1,6 +1,5 @@
 // Loads withdraw.js in a Node VM with a mutable fake DOM, so the post-confirm
 // decision logic can be tested without a browser.
-//
 // Two properties matter and are easy to lose:
 //
 //  1. The document is MUTABLE. `doc.present` is a live Set. A test can add or
@@ -26,8 +25,7 @@ const SOURCE = readFileSync(SRC, "utf8");
 // ECMAScript intrinsics come free inside a VM context. These are the host-provided
 // globals withdraw.js touches at LOAD time, so they are all the sandbox needs.
 // Deliberately absent: Event, DataTransfer, ClipboardEvent, HTMLInputElement.
-// Only setReactValue / dispatchPaste / enterOtp use those, and none of the
-// post-confirm code path does. Driving those functions here throws ReferenceError.
+//
 const hostGlobals = () => ({ setTimeout, clearTimeout, console });
 
 // window.__zhDom is injected separately in production (dom-helpers.js).

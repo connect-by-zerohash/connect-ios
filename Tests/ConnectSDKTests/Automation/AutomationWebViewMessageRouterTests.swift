@@ -619,4 +619,43 @@ struct AutomationWebViewMessageRouterDispatchTests {
         #expect(handle.resumeCount == 1)
         #expect(handle.dismissed == true)                // terminal submitted → dismissed
     }
+
+    @Test("a platform timeout reaches the wire naming its stage")
+    func timeoutStageReachesTheWire() async {
+        let sink = FakeReplySink()
+        let router = makeRouter(
+            seed: [StubAuthFlow(id: "cbase",
+                                throwOnStatus: RunnerError.timeout(stage: .navigationSettle))],
+            sink: sink)
+        await router.dispatch(ZeroAuthRequest(id: "s1", platform: "cbase", operation: "auth.status"))
+        #expect(sink.responses.count == 1)
+        #expect(sink.responses[0].success == false)
+        #expect(sink.responses[0].error == "timeout: navigationSettle")
+    }
+
+    @Test("a timeout on a read is advertised as retryable")
+    func readTimeoutIsRetryable() async {
+        let sink = FakeReplySink()
+        let router = makeRouter(
+            seed: [StubAuthFlow(id: "cbase",
+                                throwOnStatus: RunnerError.timeout(stage: .initialLoad))],
+            sink: sink)
+        await router.dispatch(ZeroAuthRequest(id: "s2", platform: "cbase", operation: "auth.status"))
+        #expect(sink.responses[0].retryable == true)
+    }
+
+    @Test("withdraw steps are never advertised as retryable")
+    func withdrawStepsNeverRetryable() {
+        let R = AutomationWebViewMessageRouter.self
+        #expect(R.isSafeToRetry(operation: "withdraw.start") == false)
+        #expect(R.isSafeToRetry(operation: "withdraw.continue") == false)
+        #expect(R.isSafeToRetry(operation: "withdraw.cancel") == false)
+        #expect(R.isSafeToRetry(operation: "something.unknown") == false)
+
+        #expect(R.isSafeToRetry(operation: "auth.status") == true)
+        #expect(R.isSafeToRetry(operation: "auth.login") == true)
+        #expect(R.isSafeToRetry(operation: "getBalance") == true)
+
+        #expect(R.isSafeToRetry(operation: "getDepositAddress") == false)
+    }
 }
