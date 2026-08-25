@@ -112,18 +112,17 @@ public struct DepositEvent {
         return data["depositId"] as? String
     }
 
-    /// Deposit status
+    /// Deposit status.
+    ///
+    /// `status` arrives as an object (`{ value, details, occurredAt }`), so the
+    /// readable status is `status.value`, not the object itself.
     public var status: String? {
-        return data["status"] as? String
+        return (data["status"] as? [String: Any])?["value"] as? String
     }
-    
+
     /// Returns true if the deposit is successful, otherwise returns false
     public var success: Bool {
-        guard let status = data["status"] as? [String: Any],
-              let value = status["value"] as? String else {
-            return false
-        }
-        return value.lowercased() == "processed"
+        return status?.lowercased() == "processed"
     }
 
     /// Asset ticker (btc, eth, usdc, etc.)

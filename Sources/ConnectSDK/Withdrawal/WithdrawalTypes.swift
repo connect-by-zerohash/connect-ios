@@ -27,18 +27,25 @@ public struct WithdrawalEvent {
         return data["withdrawalId"] as? String
     }
 
-    /// Withdrawal status string
+    /// Withdrawal status string.
+    ///
+    /// `status` arrives as an object (`{ value, details, occurredAt }`), so the
+    /// readable status is `status.value`, not the object itself.
     public var status: String? {
-        return data["status"] as? String
+        return (data["status"] as? [String: Any])?["value"] as? String
     }
 
-    /// Returns true if the withdrawal was successfully processed
+    /// Returns true if the withdrawal reached a successful terminal state.
+    ///
+    /// A withdrawal's terminal success value is `CONFIRMED`, not `PROCESSED`
+    /// (the web SDK's `WithdrawalStatusValue.COMPLETED` is the string
+    /// `'CONFIRMED'`, and its polling stops only at `CONFIRMED` or `FAILED`).
+    /// Comparing against `processed` alone made this `false` for every
+    /// successful withdrawal. `processed` is still accepted so that nothing
+    /// which somehow matched it before regresses.
     public var success: Bool {
-        guard let status = data["status"] as? [String: Any],
-              let value = status["value"] as? String else {
-            return false
-        }
-        return value.lowercased() == "processed"
+        guard let value = status?.lowercased() else { return false }
+        return value == "confirmed" || value == "processed"
     }
 
     /// Asset ticker (btc, eth, usdc, etc.)
