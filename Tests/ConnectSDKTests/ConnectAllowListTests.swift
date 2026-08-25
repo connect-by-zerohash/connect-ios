@@ -109,7 +109,9 @@ struct ConnectAllowListTests {
         // must stay in the default list alongside the SDK web-shell hosts.
         let expected = [
             "connect.xyz", "zerohash.com", "gemini.com", "robinhood.com",
-            "dynamicauth.com", "dynamic-static-assets.com", "dynamic.xyz", "ton.org",
+            "dynamicauth.com", "dynamic-static-assets.com", "dynamic.xyz",
+            "walletconnect.org", "walletconnect.com", "web3modal.org",
+            "ton.org",
         ]
         for host in expected {
             #expect(ConnectAllowList.default.hosts.contains(host), "missing default host: \(host)")
@@ -119,5 +121,12 @@ struct ConnectAllowListTests {
         // dot-suffix match must cover from the base-domain entry.
         #expect(ConnectAllowList.default.contains(host: "app.dynamicauth.com"))
         #expect(ConnectAllowList.default.contains(host: "config.ton.org"))
+        // WalletConnect / Reown reach the relay, verify, pulse, and catalog
+        // hosts from subdomains of the base entries.
+        #expect(ConnectAllowList.default.contains(host: "relay.walletconnect.org"))
+        #expect(ConnectAllowList.default.contains(host: "verify.walletconnect.org"))
+        #expect(ConnectAllowList.default.contains(host: "pulse.walletconnect.org"))
+        #expect(ConnectAllowList.default.contains(host: "rpc.walletconnect.com"))
+        #expect(ConnectAllowList.default.contains(host: "api.web3modal.org"))
     }
 }

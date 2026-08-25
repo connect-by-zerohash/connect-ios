@@ -28,10 +28,16 @@ public struct ConnectAllowList: Sendable, Equatable {
         "gemini.com",
         "robinhood.com",
         // Dynamic powers the self-custody wallet list and connect flow; these
-        // cover its API, logging, WalletConnect relay, and wallet assets.
+        // cover its API, logging, and wallet assets.
         "dynamicauth.com",
         "dynamic-static-assets.com",
         "dynamic.xyz",
+        // WalletConnect v2 relay, verify, and analytics. Dynamic's WalletConnect
+        // connector reaches both the .org and .com hosts.
+        "walletconnect.org",
+        "walletconnect.com",
+        // Reown wallet catalog for the WalletConnect wallet list.
+        "web3modal.org",
         // TON Connect wallet registry, required for TON wallets.
         "ton.org",
     ])
