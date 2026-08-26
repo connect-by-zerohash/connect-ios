@@ -96,7 +96,67 @@ final class WithdrawFlowTypesTests: XCTestCase {
         let obj = try encodedObject(state)
         XCTAssertEqual(obj["state"] as? String, "rejected")
         XCTAssertEqual(obj["reason"] as? String, "otp_rejected")
-        XCTAssertFalse(obj.keys.contains("pendingTransfer")) // optional key omitted when nil
+        XCTAssertFalse(obj.keys.contains("pendingTransfer"))
+        XCTAssertFalse(obj.keys.contains("fundsAvailability"))
+    }
+
+    // MARK: - funds_not_available (AUTH-4220)
+
+    func testFundsNotAvailableOmitsAvailabilityWhenUncaptured() throws {
+        let state = WithdrawState.rejected(
+            reason: WithdrawRejectReason.fundsNotAvailable, pendingTransfer: nil)
+        let obj = try encodedObject(state)
+        XCTAssertEqual(obj["state"] as? String, "rejected")
+        XCTAssertEqual(obj["reason"] as? String, "funds_not_available")
+        XCTAssertFalse(obj.keys.contains("fundsAvailability"))
+    }
+
+    func testFundsAvailabilityRoundTripsWhenPresent() throws {
+        let state = WithdrawState.rejected(
+            reason: WithdrawRejectReason.fundsNotAvailable,
+            pendingTransfer: nil,
+            fundsAvailability: FundsAvailability(
+                asset: "USDC", availableToSend: "0", availableToSendFiat: "0"))
+        let obj = try encodedObject(state)
+        let availability = try XCTUnwrap(obj["fundsAvailability"] as? [String: Any])
+        XCTAssertEqual(availability["asset"] as? String, "USDC")
+        XCTAssertEqual(availability["availableToSend"] as? String, "0")
+        XCTAssertEqual(availability["availableToSendFiat"] as? String, "0")
+
+        let back = try decode(WithdrawState.self, String(decoding: try JSONEncoder().encode(state), as: UTF8.self))
+        XCTAssertEqual(back, state)
+    }
+
+    func testFundsAvailabilityDecodesFromTheWire() throws {
+        let state = try decode(WithdrawState.self, """
+        {
+          "state": "rejected",
+          "reason": "funds_not_available",
+          "fundsAvailability": {
+            "asset": "ETH",
+            "availableToSend": "0.01035350998522571",
+            "availableToSendFiat": null
+          }
+        }
+        """)
+        guard case .rejected(let reason, let pending, let availability) = state else {
+            return XCTFail("expected a rejected state, got \(state)")
+        }
+        XCTAssertEqual(reason, WithdrawRejectReason.fundsNotAvailable)
+        XCTAssertNil(pending)
+        XCTAssertEqual(availability?.asset, "ETH")
+        XCTAssertEqual(availability?.availableToSend, "0.01035350998522571")
+        XCTAssertNil(availability?.availableToSendFiat)
+    }
+
+    func testFundsNotAvailableIsTerminal() {
+        XCTAssertTrue(
+            WithdrawState.rejected(
+                reason: WithdrawRejectReason.fundsNotAvailable,
+                pendingTransfer: nil).endsSession)
+        XCTAssertFalse(
+            WithdrawState.rejected(
+                reason: WithdrawRejectReason.otpRejected, pendingTransfer: nil).endsSession)
     }
 
     private static let sampleDetails = WithdrawDetails(

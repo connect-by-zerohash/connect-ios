@@ -108,4 +108,29 @@ final class CoinbaseWithdrawSkeletonTests: XCTestCase {
         let state = try Coinbase.mapWithdrawState(dict)
         XCTAssertEqual(state, .rejected(reason: WithdrawRejectReason.otpRejected, pendingTransfer: nil))
     }
+
+    func testMapWithdrawStateFundsNotAvailable() throws {
+        let dict: [String: Any] = ["state": "rejected", "reason": "funds_not_available"]
+        let state = try Coinbase.mapWithdrawState(dict)
+        XCTAssertEqual(
+            state,
+            .rejected(reason: WithdrawRejectReason.fundsNotAvailable, pendingTransfer: nil))
+        XCTAssertTrue(state.endsSession)
+    }
+
+    func testMapWithdrawStateFundsNotAvailableWithFigures() throws {
+        let dict: [String: Any] = [
+            "state": "rejected",
+            "reason": "funds_not_available",
+            "fundsAvailability": [
+                "asset": "USDC", "availableToSend": "0", "availableToSendFiat": "0",
+            ],
+        ]
+        let state = try Coinbase.mapWithdrawState(dict)
+        XCTAssertEqual(state, .rejected(
+            reason: WithdrawRejectReason.fundsNotAvailable,
+            pendingTransfer: nil,
+            fundsAvailability: FundsAvailability(
+                asset: "USDC", availableToSend: "0", availableToSendFiat: "0")))
+    }
 }
