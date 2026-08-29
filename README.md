@@ -34,6 +34,18 @@ The SDK exposes three apps that can be presented from your iOS application:
 > [Universal Link Setup](#universal-link-setup) for the full integration
 > requirements.
 
+### Required Info.plist keys
+
+Crypto transactions in the Auth SDK can be held by the exchange for an identity check, which the
+user completes inside the SDK's WebView using the camera. Your app must declare
+both keys below.
+
+| Key | Why |
+| --- | --- |
+| `NSCameraUsageDescription` | Liveness / document capture during the identity check |
+| `NSMicrophoneUsageDescription` | Requested alongside the camera by the identity check |
+
+
 ## Installation
 
 ### Swift Package Manager
