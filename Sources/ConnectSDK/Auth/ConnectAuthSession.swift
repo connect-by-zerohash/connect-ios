@@ -29,7 +29,6 @@ public class ConnectAuthSession {
     private let allowList: ConnectAllowList
 
     /// Universal Link callback used by the OAuth flow
-    private let oauthCallback: ConnectOAuthCallback
 
     /// Whether the session has been presented
     private var isPresented: Bool = false
@@ -40,13 +39,12 @@ public class ConnectAuthSession {
     // MARK: - Initialization
 
     /// Creates a new auth session configuration
-    internal init(jwt: String, environment: Environment, theme: Theme, callbacks: AuthCallbacks, allowList: ConnectAllowList = .default, oauthCallback: ConnectOAuthCallback = .default) {
+    internal init(jwt: String, environment: Environment, theme: Theme, callbacks: AuthCallbacks, allowList: ConnectAllowList = .default) {
         self.jwt = jwt
         self.environment = environment
         self.theme = theme
         self.callbacks = callbacks
         self.allowList = allowList
-        self.oauthCallback = oauthCallback
     }
 
     // MARK: - Public Methods
@@ -77,7 +75,6 @@ public class ConnectAuthSession {
             theme: theme.rawValue,
             callbackHandler: callbackHandler,
             allowList: allowList,
-            oauthCallback: oauthCallback
         )
 
         // Create navigation controller

@@ -19,8 +19,7 @@ struct ConnectSDKConfigurationTests {
             jwt: MockData.validJWT,
             environment: .sandbox,
             theme: .light,
-            callbacks: callbacks,
-            oauthCallback: .default
+            callbacks: callbacks
         )
 
         #expect(session != nil)
@@ -28,7 +27,7 @@ struct ConnectSDKConfigurationTests {
 
     @Test("ConnectSDK configureAuth with default parameters succeeds")
     func testConfigureAuthDefaults() {
-        let session = ConnectSDK.configureAuth(jwt: MockData.validJWT, oauthCallback: .default)
+        let session = ConnectSDK.configureAuth(jwt: MockData.validJWT)
 
         #expect(session != nil)
     }
@@ -37,8 +36,7 @@ struct ConnectSDKConfigurationTests {
     func testConfigureAuthProduction() {
         let session = ConnectSDK.configureAuth(
             jwt: MockData.validJWT,
-            environment: .production,
-            oauthCallback: .default
+            environment: .production
         )
 
         #expect(session != nil)
@@ -48,18 +46,15 @@ struct ConnectSDKConfigurationTests {
     func testConfigureAuthDifferentThemes() {
         let lightSession = ConnectSDK.configureAuth(
             jwt: MockData.validJWT,
-            theme: .light,
-            oauthCallback: .default
+            theme: .light
         )
         let darkSession = ConnectSDK.configureAuth(
             jwt: MockData.validJWT,
-            theme: .dark,
-            oauthCallback: .default
+            theme: .dark
         )
         let systemSession = ConnectSDK.configureAuth(
             jwt: MockData.validJWT,
-            theme: .system,
-            oauthCallback: .default
+            theme: .system
         )
 
         #expect(lightSession != nil)
@@ -69,7 +64,7 @@ struct ConnectSDKConfigurationTests {
 
     @Test("ConnectSDK configureAuth returns ConnectAuthSession type")
     func testConfigureAuthReturnType() {
-        let session = ConnectSDK.configureAuth(jwt: MockData.validJWT, oauthCallback: .default)
+        let session = ConnectSDK.configureAuth(jwt: MockData.validJWT)
 
         #expect(session is ConnectAuthSession)
     }
@@ -79,14 +74,12 @@ struct ConnectSDKConfigurationTests {
         let session1 = ConnectSDK.configureAuth(
             jwt: MockData.validJWT,
             environment: .sandbox,
-            theme: .light,
-            oauthCallback: .default
+            theme: .light
         )
         let session2 = ConnectSDK.configureAuth(
             jwt: MockData.validJWT,
             environment: .production,
-            theme: .dark,
-            oauthCallback: .default
+            theme: .dark
         )
 
         #expect(session1 !== session2)
@@ -96,18 +89,15 @@ struct ConnectSDKConfigurationTests {
     func testConfigureAuthDifferentCallbacks() {
         let session1 = ConnectSDK.configureAuth(
             jwt: MockData.validJWT,
-            callbacks: MockData.callbacksWithCloseOnly,
-            oauthCallback: .default
+            callbacks: MockData.callbacksWithCloseOnly
         )
         let session2 = ConnectSDK.configureAuth(
             jwt: MockData.validJWT,
-            callbacks: MockData.callbacksWithErrorOnly,
-            oauthCallback: .default
+            callbacks: MockData.callbacksWithErrorOnly
         )
         let session3 = ConnectSDK.configureAuth(
             jwt: MockData.validJWT,
-            callbacks: MockData.callbacksWithAllHandlers,
-            oauthCallback: .default
+            callbacks: MockData.callbacksWithAllHandlers
         )
 
         #expect(session1 != nil)
@@ -121,7 +111,7 @@ struct ConnectSDKIntegrationTests {
 
     @Test("ConnectSDK configured session can be presented")
     func testConfiguredSessionPresentation() {
-        let session = ConnectSDK.configureAuth(jwt: MockData.validJWT, oauthCallback: .default)
+        let session = ConnectSDK.configureAuth(jwt: MockData.validJWT)
         let presenter = MockUIViewController()
 
         let result = session.present(from: presenter)
@@ -131,7 +121,7 @@ struct ConnectSDKIntegrationTests {
 
     @Test("ConnectSDK configured session can be cancelled")
     func testConfiguredSessionCancellation() {
-        let session = ConnectSDK.configureAuth(jwt: MockData.validJWT, oauthCallback: .default)
+        let session = ConnectSDK.configureAuth(jwt: MockData.validJWT)
         let presenter = MockUIViewController()
 
         _ = session.present(from: presenter)
@@ -147,8 +137,7 @@ struct ConnectSDKIntegrationTests {
             jwt: MockData.validJWT,
             environment: .sandbox,
             theme: .light,
-            callbacks: callbacks,
-            oauthCallback: .default
+            callbacks: callbacks
         )
         let presenter = MockUIViewController()
 

@@ -207,12 +207,11 @@ actor AnimationCapture {
 // MARK: - Result Builders for URLs
 
 extension URL {
-    /// Create OAuth callback URL with query parameters (matches ConnectOAuthCallback.default)
+    /// Create OAuth callback URL with query parameters
     static func oauthCallback(code: String = "auth_code_123", state: String = "state_xyz") -> URL {
         var components = URLComponents()
-        components.scheme = "https"
-        components.host = ConnectOAuthCallback.default.host
-        components.path = ConnectOAuthCallback.default.path
+        components.scheme = OAuthHandler.oauthCallbackScheme
+        components.host = "callback"
         components.queryItems = [
             URLQueryItem(name: "code", value: code),
             URLQueryItem(name: "state", value: state)
@@ -220,12 +219,11 @@ extension URL {
         return components.url ?? URL(fileURLWithPath: "/")
     }
 
-    /// Create OAuth callback URL with fragment parameters (matches ConnectOAuthCallback.default)
+    /// Create OAuth callback URL with fragment parameters
     static func oauthCallbackWithFragment(accessToken: String = "access_token_123", tokenType: String = "Bearer") -> URL {
         var components = URLComponents()
-        components.scheme = "https"
-        components.host = ConnectOAuthCallback.default.host
-        components.path = ConnectOAuthCallback.default.path
+        components.scheme = OAuthHandler.oauthCallbackScheme
+        components.host = "callback"
         components.fragment = "access_token=\(accessToken)&token_type=\(tokenType)"
         return components.url ?? URL(fileURLWithPath: "/")
     }

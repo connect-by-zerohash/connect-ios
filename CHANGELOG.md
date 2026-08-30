@@ -5,6 +5,44 @@ All notable changes to ConnectSDK for iOS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] – 2026-08-29
+
+OAuth returns to a `connectsdk-oauth://callback` custom scheme again, matching
+the Android SDK. The Universal Link callback introduced in `1.0.0` could never
+complete a flow, so no working integration is affected.
+
+### Breaking changes
+
+- **`oauthCallback` removed from `configureAuth`, `configureRecovery` and
+  `configureWithdrawal`, and the `ConnectOAuthCallback` type is deleted.**
+  Delete the argument from your `configure*` calls. You can also drop the
+  Associated Domains entitlement and stop hosting an
+  `apple-app-site-association` file for the callback host, since neither is
+  used any more.
+
+### Fixed
+
+- **OAuth flows can complete.** `1.0.0` through `1.1.0` built the session with
+  `ASWebAuthenticationSession.Callback.https(host:path:)`, which only returns if
+  the final redirect lands on the configured host. The Connect backend redirects
+  the OAuth callback to a fixed host per environment rather than to the host the
+  integrator configured, so the session never received a callback. iOS also
+  validates the association when the session _starts_, so a host without a
+  matching AASA failed with "Application is not associated with domain …" before
+  the provider's login page could render, surfacing as an immediate
+  "Connection failed or was cancelled".
+
+### Notes on the security rationale
+
+The custom scheme was removed in `1.0.0` as a hardening measure. It does not
+carry the hijacking risk in this delivery mechanism:
+`ASWebAuthenticationSession(callbackURLScheme:)` claims the redirect in-process,
+inside the session that started it, so the system URL router is never consulted
+and no other app can register to receive it. The scheme is not declared in any
+`Info.plist`. The interceptable shape is a scheme received through
+`application(_:open:)` or an Android `BROWSABLE` intent filter, neither of which
+this SDK uses.
+
 ## [1.1.0] – 2026-08-03
 
 ### Added
@@ -56,20 +94,20 @@ Integrators upgrading from `0.x` will need to make changes — see the
   integrations the integrator exposes (OAuth-driven flows like Gemini or
   Coinbase, or non-OAuth ones like wallet connect, scraping, manual).
   Integrators must:
-    1. Pick a Universal Link host they control.
-    2. Add `applinks:<host>` and `webcredentials:<host>` (plus the
-       `?mode=developer` variants for dev builds) to their app's
-       `Associated Domains` entitlement. The `webcredentials:` entry is
-       mandatory — plain `applinks:` alone produces an "Application is
-       not associated with domain …" runtime error.
-    3. Serve an `apple-app-site-association` file at
-       `https://<host>/.well-known/apple-app-site-association` declaring
-       their bundle identifier under both `applinks` and `webcredentials`.
-    4. Pass `ConnectOAuthCallback(host: "<host>", path: "<path>")` to every
-       `configure*` call.
-    5. Register the host with zerohash so it is allow-listed on the
-       Connect backend.
-  See the README's "Universal Link Setup" section for the full procedure.
+  1. Pick a Universal Link host they control.
+  2. Add `applinks:<host>` and `webcredentials:<host>` (plus the
+     `?mode=developer` variants for dev builds) to their app's
+     `Associated Domains` entitlement. The `webcredentials:` entry is
+     mandatory — plain `applinks:` alone produces an "Application is
+     not associated with domain …" runtime error.
+  3. Serve an `apple-app-site-association` file at
+     `https://<host>/.well-known/apple-app-site-association` declaring
+     their bundle identifier under both `applinks` and `webcredentials`.
+  4. Pass `ConnectOAuthCallback(host: "<host>", path: "<path>")` to every
+     `configure*` call.
+  5. Register the host with zerohash so it is allow-listed on the
+     Connect backend.
+     See the README's "Universal Link Setup" section for the full procedure.
 - **`connectsdk-oauth://` custom URL scheme fully removed.** No
   deprecation, no fallback. The constants (`oauthCallbackScheme`,
   `expectedCallbackHost`), the custom-scheme branches in

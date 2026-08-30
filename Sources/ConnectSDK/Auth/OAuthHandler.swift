@@ -3,18 +3,33 @@
 //  ConnectSDK
 //
 //  Handles OAuth authentication flows using ASWebAuthenticationSession with a
-//  Universal Link callback. The custom URL scheme used in earlier versions has
-//  been removed: custom schemes are not unique to one app and can be hijacked
-//  by other apps shipping the same SDK. The integrator's app must declare an
-//  `applinks:<host>` Associated Domains entitlement matching the configured
-//  ConnectOAuthCallback, and the host must serve an `apple-app-site-association`
-//  file claiming the configured path for that bundle identifier.
+//  custom-scheme callback, matching zerohash-ios and both Android SDKs.
+//
+//  The scheme needs no Info.plist registration and cannot be hijacked here:
+//  ASWebAuthenticationSession claims the redirect in-process, inside the session
+//  it started, so the system URL router is never consulted and no other app can
+//  register to receive it. That is only true of this delivery mechanism. An app
+//  receiving the same scheme via `application(_:open:)` would be interceptable.
+//
+//  The Universal Link callback this replaces required every integrator to own a
+//  domain, serve an AASA naming their bundle ID, and have the Connect backend
+//  redirect there. The backend redirects to a fixed host per environment instead,
+//  so that flow could never complete.
 //
 
 import Foundation
 import AuthenticationServices
 
 class OAuthHandler: NSObject {
+
+    // MARK: - Constants
+
+    /// Callback scheme the session claims. Shared with zerohash-ios and the
+    /// Android SDKs, and with the `oauth-callback` web page that navigates to it.
+    static let oauthCallbackScheme = "connectsdk-oauth"
+
+    /// Host the callback URL must use, i.e. `connectsdk-oauth://callback`.
+    private static let expectedCallbackHost = "callback"
 
     // MARK: - Types
 
@@ -39,7 +54,8 @@ class OAuthHandler: NSObject {
             case .sessionFailed(let message):
                 return "Authentication session failed: \(message)"
             case .invalidCallbackURL(let url):
-                return "Invalid callback URL received: \(url)"
+                return "Invalid callback URL received: \(url). Expected: "
+                    + "\(OAuthHandler.oauthCallbackScheme)://\(OAuthHandler.expectedCallbackHost)"
             }
         }
     }
@@ -52,23 +68,18 @@ class OAuthHandler: NSObject {
     private var authSession: ASWebAuthenticationSession?
     private var completion: OAuthCompletion?
     private weak var presentingViewController: UIViewController?
-    private var callback: ConnectOAuthCallback?
 
     // MARK: - Public Methods
 
     /// Initiates the OAuth flow.
     /// - Parameters:
     ///   - url: The OAuth authorization URL.
-    ///   - callback: Universal Link callback configuration. The integrator's app
-    ///               must declare `applinks:<callback.host>` in Associated Domains
-    ///               and the host must serve a matching AASA file.
     ///   - presentingViewController: View controller to present the auth session from.
     ///   - prefersEphemeralSession: Whether to use an ephemeral browser session.
     ///                              Defaults to `true` for security (no SSO with Safari).
     ///   - completion: Invoked with the parsed callback parameters or an error.
     func authenticate(
         url: String,
-        callback: ConnectOAuthCallback,
         from presentingViewController: UIViewController,
         prefersEphemeralSession: Bool = true,
         completion: @escaping OAuthCompletion
@@ -80,11 +91,10 @@ class OAuthHandler: NSObject {
 
         self.completion = completion
         self.presentingViewController = presentingViewController
-        self.callback = callback
 
         authSession = ASWebAuthenticationSession(
             url: authURL,
-            callback: .https(host: callback.host, path: callback.path)
+            callbackURLScheme: Self.oauthCallbackScheme
         ) { [weak self] callbackURL, error in
             self?.handleAuthenticationResult(callbackURL: callbackURL, error: error)
         }
@@ -125,9 +135,9 @@ class OAuthHandler: NSObject {
             return
         }
 
-        guard let callback = callback, callback.matches(callbackURL) else {
+        guard Self.isExpectedCallback(callbackURL) else {
             let host = callbackURL.host ?? "?"
-            Log.bridge.error("rejected OAuth callback from unexpected URL host=\(host, privacy: .private) path=\(callbackURL.path, privacy: .private)")
+            Log.bridge.error("rejected OAuth callback from unexpected URL host=\(host, privacy: .private) scheme=\(callbackURL.scheme ?? "?", privacy: .private)")
             completion?(.failure(OAuthError.invalidCallbackURL(callbackURL.absoluteString)))
             return
         }
@@ -138,6 +148,13 @@ class OAuthHandler: NSObject {
         } else {
             completion?(.success(parameters))
         }
+    }
+
+    /// The session only ever hands back URLs on the configured scheme, so this is
+    /// belt-and-braces against a provider appending an unexpected host.
+    static func isExpectedCallback(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == oauthCallbackScheme
+            && url.host?.lowercased() == expectedCallbackHost
     }
 
     private func parseOAuthParameters(from url: URL) -> [String: String] {
@@ -172,7 +189,6 @@ class OAuthHandler: NSObject {
         authSession = nil
         completion = nil
         presentingViewController = nil
-        callback = nil
     }
 }
 

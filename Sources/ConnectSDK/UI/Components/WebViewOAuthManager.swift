@@ -20,13 +20,6 @@ class WebViewOAuthManager {
 
     weak var delegate: WebViewOAuthManagerDelegate?
     private var oauthHandler: OAuthHandler?
-    private let callback: ConnectOAuthCallback
-
-    // MARK: - Initialization
-
-    init(callback: ConnectOAuthCallback = .default) {
-        self.callback = callback
-    }
 
     // MARK: - Public Methods
 
@@ -75,7 +68,6 @@ class WebViewOAuthManager {
 
         oauthHandler?.authenticate(
             url: url,
-            callback: callback,
             from: viewController
         ) { [weak self] result in
             guard let self = self else { return }

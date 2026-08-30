@@ -2,7 +2,7 @@
 //  OAuthHandlerTests.swift
 //  ConnectSDKTests
 //
-//  Tests for OAuthHandler and the ConnectOAuthCallback validation surface.
+//  Tests for OAuthHandler and its custom-scheme callback validation.
 //
 
 import Foundation
@@ -10,68 +10,31 @@ import Testing
 import AuthenticationServices
 @testable import ConnectSDK
 
-struct ConnectOAuthCallbackTests {
+struct OAuthCallbackValidationTests {
 
-    @Test("urlPrefix combines scheme, host, and path")
-    func testURLPrefix() {
-        let callback = ConnectOAuthCallback(host: "example.com", path: "/cb")
-        #expect(callback.urlPrefix == "https://example.com/cb")
+    @Test("accepts the exact custom-scheme callback")
+    func testAccepts() {
+        #expect(OAuthHandler.isExpectedCallback(URL(string: "connectsdk-oauth://callback?connectionId=abc")!))
     }
 
-    @Test("matches accepts exact host match")
-    func testMatches_ExactHost() {
-        let callback = ConnectOAuthCallback(host: "connect.xyz", path: "/oauth")
-        let url = URL(string: "https://connect.xyz/oauth?code=abc")!
-        #expect(callback.matches(url))
+    @Test("accepts scheme and host case-insensitively")
+    func testCaseInsensitive() {
+        #expect(OAuthHandler.isExpectedCallback(URL(string: "ConnectSDK-OAuth://Callback?connectionId=abc")!))
     }
 
-    @Test("matches accepts dot-suffix subdomain")
-    func testMatches_DotSuffixSubdomain() {
-        let callback = ConnectOAuthCallback(host: "connect.xyz", path: "/oauth")
-        let url = URL(string: "https://sdk.connect.xyz/oauth?code=abc")!
-        #expect(callback.matches(url))
+    @Test("rejects a different host on the right scheme")
+    func testRejectsWrongHost() {
+        #expect(!OAuthHandler.isExpectedCallback(URL(string: "connectsdk-oauth://elsewhere?connectionId=abc")!))
     }
 
-    @Test("matches rejects sibling host that ends in target")
-    func testMatches_RejectsSiblingHost() {
-        let callback = ConnectOAuthCallback(host: "connect.xyz", path: "/oauth")
-        let url = URL(string: "https://evilconnect.xyz/oauth?code=abc")!
-        #expect(!callback.matches(url))
+    @Test("rejects https, which is what the Universal Link flow used")
+    func testRejectsHTTPS() {
+        #expect(!OAuthHandler.isExpectedCallback(URL(string: "https://sdk.connect.xyz/oauth-callback?connectionId=abc")!))
     }
 
-    @Test("matches rejects host where target is a substring before another label")
-    func testMatches_RejectsHostWithTargetAsPrefix() {
-        let callback = ConnectOAuthCallback(host: "connect.xyz", path: "/oauth")
-        let url = URL(string: "https://connect.xyz.attacker.com/oauth?code=abc")!
-        #expect(!callback.matches(url))
-    }
-
-    @Test("matches rejects wrong path")
-    func testMatches_RejectsWrongPath() {
-        let callback = ConnectOAuthCallback(host: "connect.xyz", path: "/oauth")
-        let url = URL(string: "https://connect.xyz/somewhere-else?code=abc")!
-        #expect(!callback.matches(url))
-    }
-
-    @Test("matches accepts longer path under the prefix")
-    func testMatches_AcceptsLongerPath() {
-        let callback = ConnectOAuthCallback(host: "connect.xyz", path: "/oauth")
-        let url = URL(string: "https://connect.xyz/oauth/callback?code=abc")!
-        #expect(callback.matches(url))
-    }
-
-    @Test("matches rejects non-HTTPS scheme")
-    func testMatches_RejectsHTTP() {
-        let callback = ConnectOAuthCallback(host: "connect.xyz", path: "/oauth")
-        let url = URL(string: "http://connect.xyz/oauth?code=abc")!
-        #expect(!callback.matches(url))
-    }
-
-    @Test("matches is case-insensitive on host")
-    func testMatches_HostCaseInsensitive() {
-        let callback = ConnectOAuthCallback(host: "Connect.XYZ", path: "/oauth")
-        let url = URL(string: "https://connect.xyz/oauth?code=abc")!
-        #expect(callback.matches(url))
+    @Test("rejects a look-alike scheme")
+    func testRejectsLookAlikeScheme() {
+        #expect(!OAuthHandler.isExpectedCallback(URL(string: "connectsdk-oauth-evil://callback?connectionId=abc")!))
     }
 }
 
@@ -113,9 +76,8 @@ struct OAuthURLTests {
 
     @Test("OAuthCallbackURL with code") func testOAuthCallbackURL_WithCode() {
         let url = MockData.oauthCallbackURLWithCode("test_code_123")
-        #expect(url.scheme == "https")
-        #expect(url.host == ConnectOAuthCallback.default.host)
-        #expect(url.path == ConnectOAuthCallback.default.path)
+        #expect(url.scheme == OAuthHandler.oauthCallbackScheme)
+        #expect(OAuthHandler.isExpectedCallback(url))
         #expect(url.query?.contains("code=test_code_123") == true)
     }
 
@@ -134,10 +96,10 @@ struct OAuthURLTests {
         #expect(url.fragment?.contains("token_type=Bearer") == true)
     }
 
-    @Test("invalid OAuth callback URL is rejected by ConnectOAuthCallback.default")
+    @Test("invalid OAuth callback URL is rejected")
     func testInvalidOauthCallbackURL() {
         let url = MockData.invalidOauthCallbackURL()
-        #expect(!ConnectOAuthCallback.default.matches(url))
+        #expect(!OAuthHandler.isExpectedCallback(url))
     }
 }
 

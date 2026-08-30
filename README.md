@@ -15,7 +15,7 @@ The SDK exposes three apps that can be presented from your iOS application:
 ## Features
 
 - **Three Connect apps** — Auth, Recovery, and Withdrawal exposed through a single SDK
-- **Secure OAuth2/OIDC Authentication** — Universal Link callbacks via `ASWebAuthenticationSession`
+- **Secure OAuth2/OIDC Authentication** — system-browser OAuth via `ASWebAuthenticationSession`, no host-app configuration required
 - **Configurable host allow-list** — restrict the hosts the embedded WebView is allowed to navigate to or load resources from
 - **Theme Support** — Light, dark, and system theme options to match your app's design
 - **Real-time Event Callbacks** — Typed callbacks for each app flow
@@ -28,11 +28,6 @@ The SDK exposes three apps that can be presented from your iOS application:
 - Swift 6.0+
 - Xcode 15.3+
 
-> The minimum deployment target is **iOS 17.4** because the SDK relies on
-> `ASWebAuthenticationSession.Callback.https(host:path:)` to enforce
-> Universal Link routing for the OAuth callback. See
-> [Universal Link Setup](#universal-link-setup) for the full integration
-> requirements.
 
 ### Required Info.plist keys
 
@@ -67,11 +62,10 @@ dependencies: [
 ]
 ```
 
-> Upgrading from a `0.x` version? See [CHANGELOG.md](CHANGELOG.md) — the
-> `1.0.0` release contains several intentional breaking changes
-> (iOS 17.4 deployment minimum, required `oauthCallback` argument,
-> Universal Link OAuth replacing the removed `connectsdk-oauth://`
-> scheme).
+> Upgrading? See [CHANGELOG.md](CHANGELOG.md). `1.2.0` fixes OAuth and makes the
+> `oauthCallback` argument redundant. No source changes are required. When
+> convenient, delete the argument from your `configure*` calls and drop the
+> Associated Domains entitlement and AASA file it needed.
 
 Then add `ConnectSDK` to your target's dependencies:
 
@@ -100,29 +94,21 @@ platform.
 
 > **Note:** For detailed instructions on obtaining JWT tokens, please refer to the [Connect documentation](https://docs.zerohash.com/docs/connect).
 
-### Configure the OAuth callback
+### OAuth requires no configuration
 
-All three apps require a `ConnectOAuthCallback` describing the Universal
-Link iOS will route the OAuth callback to at the end of the authentication
-flow. The callback **must** be backed by an `apple-app-site-association`
-(AASA) file on the host you supply, and the host must be communicated to
-zerohash so it can be allow-listed on the Connect backend. See
-[Universal Link Setup](#universal-link-setup) for the full setup.
-
-```swift
-let oauthCallback = ConnectOAuthCallback(
-    host: "links.your-app.com",
-    path: "/connect/oauth-callback"
-)
-```
+OAuth flows run in `ASWebAuthenticationSession` and return on the
+`connectsdk-oauth://callback` scheme. The session claims that redirect
+in-process, so there is nothing to register in your `Info.plist`, no
+Associated Domains entitlement, and no `apple-app-site-association` file to
+host.
 
 ### (Optional) Configure the host allow-list
 
 The SDK ships with a built-in allow-list that permits navigations and
 resource loads to `connect.xyz`, `zerohash.com`, `gemini.com`,
 `robinhood.com`, and their subdomains.
-You can supply your own list — for example to add a host that hosts your
-Universal Link, or to limit the SDK to a subset of hosts — via
+You can supply your own list — for example to reach an additional host, or
+to limit the SDK to a subset of hosts — via
 `ConnectAllowList`. Host matching is exact or via dot-suffix subdomain.
 
 ```swift
@@ -173,11 +159,7 @@ class AuthViewController: UIViewController {
             environment: .production,
             theme: .system,
             callbacks: callbacks,
-            allowList: .default,
-            oauthCallback: ConnectOAuthCallback(
-                host: "links.your-app.com",
-                path: "/connect/oauth-callback"
-            )
+            allowList: .default
         )
 
         authSession?.present(from: self)
@@ -222,11 +204,7 @@ class RecoveryViewController: UIViewController {
             environment: .production,
             theme: .system,
             callbacks: callbacks,
-            allowList: .default,
-            oauthCallback: ConnectOAuthCallback(
-                host: "links.your-app.com",
-                path: "/connect/oauth-callback"
-            )
+            allowList: .default
         )
 
         recoverySession?.present(from: self)
@@ -273,177 +251,13 @@ class WithdrawalViewController: UIViewController {
             environment: .production,
             theme: .system,
             callbacks: callbacks,
-            allowList: .default,
-            oauthCallback: ConnectOAuthCallback(
-                host: "links.your-app.com",
-                path: "/connect/oauth-callback"
-            )
+            allowList: .default
         )
 
         withdrawalSession?.present(from: self)
     }
 }
 ```
-
-## Universal Link Setup
-
-OAuth flows in ConnectSDK terminate at a **Universal Link**. Unlike
-custom URL schemes, iOS will only deliver the callback URL to the app
-declared in the `apple-app-site-association` (AASA) file served by the
-callback host — another app cannot register itself to intercept the
-callback. This is the routing model the SDK enforces via
-`ASWebAuthenticationSession.Callback.https(host:path:)` (iOS 17.4+).
-
-To finish the OAuth flow successfully, you must complete every step
-below. **Skipping any step will surface as an "Application is not
-associated with domain …" error or as a callback that never returns to
-the app.**
-
-### 1. Pick a callback host and path
-
-Choose a host that you control and that you can serve an AASA file from
-over HTTPS — for example `links.your-app.com`. Pick a path prefix that
-is unique to the Connect OAuth callback, for example
-`/connect/oauth-callback`.
-
-You will use the same `host` and `path` values in your entitlement, in
-your AASA file, in the `ConnectOAuthCallback` you pass to the SDK, and
-when communicating the host to zerohash.
-
-### 2. Add the Associated Domains entitlement
-
-In your app target's **Signing & Capabilities**, add the **Associated
-Domains** capability and declare two entries for the callback host —
-`applinks:` for Universal Link routing and `webcredentials:` (required
-by `ASWebAuthenticationSession.Callback.https`; without it the auth
-session fails with "Application is not associated with domain …" at
-runtime):
-
-```
-applinks:links.your-app.com
-webcredentials:links.your-app.com
-```
-
-For development builds you can also include the `?mode=developer`
-variants so `swcd` bypasses Apple's AASA CDN and fetches your AASA
-directly during testing — production-signed builds (TestFlight / App
-Store) ignore the `?mode=developer` form, so include both:
-
-```
-applinks:links.your-app.com
-applinks:links.your-app.com?mode=developer
-webcredentials:links.your-app.com
-webcredentials:links.your-app.com?mode=developer
-```
-
-### 3. Serve an AASA file from the callback host
-
-The callback host must serve an `apple-app-site-association` file at:
-
-```
-https://links.your-app.com/.well-known/apple-app-site-association
-```
-
-Requirements:
-
-- HTTP 200, no redirects
-- `Content-Type: application/json`
-- Body declares your app's bundle identifier under both `applinks` and
-  `webcredentials`, and the `applinks.details[].components` entry
-  matches the path prefix you'll pass to `ConnectOAuthCallback`:
-
-```json
-{
-  "applinks": {
-    "details": [
-      {
-        "appIDs": ["TEAMID.com.your.bundle.id"],
-        "components": [
-          { "/": "/connect/oauth-callback*" }
-        ]
-      }
-    ]
-  },
-  "webcredentials": {
-    "apps": ["TEAMID.com.your.bundle.id"]
-  }
-}
-```
-
-Replace `TEAMID` with your Apple Developer Team ID and
-`com.your.bundle.id` with your app's bundle identifier. The path inside
-`components` must match the `path` value you supply to
-`ConnectOAuthCallback` (the trailing `*` allows any suffix appended by
-the OAuth provider).
-
-### 4. Pass the callback to the SDK
-
-The `host` and `path` you pass here **must match the AASA file and the
-Associated Domains entitlement exactly**, otherwise iOS won't route the
-callback to your app:
-
-```swift
-let oauthCallback = ConnectOAuthCallback(
-    host: "links.your-app.com",
-    path: "/connect/oauth-callback"
-)
-
-let session = ConnectSDK.configureAuth(
-    jwt: jwt,
-    oauthCallback: oauthCallback
-)
-```
-
-`ConnectOAuthCallback` is a required parameter on
-`configureAuth`, `configureRecovery`, and `configureWithdrawal` — there
-is no default and the call will fail to compile without it.
-
-### 5. Communicate the callback host to zerohash
-
-The Connect backend enforces an allow-list of permitted OAuth callback
-hosts. Before your integration can complete an OAuth flow in either
-sandbox or production, you must send zerohash:
-
-- The **callback host** (e.g. `links.your-app.com`)
-- The **callback path** (e.g. `/connect/oauth-callback`)
-- The **environment(s)** the host should be enabled in (sandbox,
-  production, or both)
-- Your **Apple Team ID** and **bundle identifier**, so the values can be
-  cross-checked against your AASA file
-
-Reach out via your usual zerohash integration channel (your account
-manager, integration Slack channel, or
-[support](https://zerohash.com/)) and include the items above. Until
-the host is registered server-side, the Connect backend will not redirect
-to it at the end of the OAuth flow.
-
-### 6. (Recommended) Add the callback host to the SDK allow-list
-
-If your callback host is outside the default `connect.xyz` /
-`zerohash.com` allow-list, add it to the `ConnectAllowList` you pass to
-the SDK so navigations to it are not blocked by the embedded WebView:
-
-```swift
-let allowList = ConnectAllowList(hosts: [
-    "connect.xyz",
-    "zerohash.com",
-    "links.your-app.com"
-])
-```
-
-### Validation
-
-The SDK validates every callback URL before delivering it to the OAuth
-result handler. A callback is accepted only when:
-
-- the scheme is `https`,
-- the URL's host equals the configured host exactly, or ends with
-  `"." + host` (exact-host-or-dot-suffix), **and**
-- the URL's path begins with the configured path.
-
-Failures are logged via `os_log` under the subsystem
-`com.zerohash.connect.sdk` and surfaced as an `invalidCallbackURL`
-error.
 
 ## API Reference
 
@@ -453,17 +267,17 @@ The main entry point for the SDK. All three configure methods follow the
 same shape; only the callbacks struct and the returned session type
 differ.
 
-#### `configureAuth(jwt:environment:theme:callbacks:allowList:oauthCallback:)`
+#### `configureAuth(jwt:environment:theme:callbacks:allowList:)`
 
 Configures an Auth session that can be presented later. Returns a
 `ConnectAuthSession`.
 
-#### `configureRecovery(jwt:environment:theme:callbacks:allowList:oauthCallback:)`
+#### `configureRecovery(jwt:environment:theme:callbacks:allowList:)`
 
 Configures a Recovery session that can be presented later. Returns a
 `ConnectRecoverySession`.
 
-#### `configureWithdrawal(jwt:environment:theme:callbacks:allowList:oauthCallback:)`
+#### `configureWithdrawal(jwt:environment:theme:callbacks:allowList:)`
 
 Configures a Withdrawal session that can be presented later. Returns a
 `ConnectWithdrawalSession`.
@@ -493,7 +307,6 @@ Task { await ConnectSDK.clearWebsiteData() }
 | `theme` | `Theme` | `.system` | `.light`, `.dark`, or `.system` |
 | `callbacks` | `AuthCallbacks` / `RecoveryCallbacks` / `WithdrawalCallbacks` | empty | App-specific event callbacks |
 | `allowList` | `ConnectAllowList` | `.default` | Hosts the WebView may navigate to / load resources from |
-| `oauthCallback` | `ConnectOAuthCallback` | — (required) | Universal Link the OAuth flow returns to |
 
 ### Session types
 
@@ -551,17 +364,6 @@ public struct ConnectAllowList {
 
 Host matching is exact, or via dot-suffix subdomain — `connect.xyz`
 matches `sdk.connect.xyz` but not `evilconnect.xyz`.
-
-#### ConnectOAuthCallback
-
-```swift
-public struct ConnectOAuthCallback {
-    public let host: String
-    public let path: String
-
-    public init(host: String, path: String = "/oauth-callback")
-}
-```
 
 #### AuthCallbacks
 
@@ -670,13 +472,13 @@ The SDK supports three theme options across all three apps:
 
 ```swift
 // Light theme
-ConnectSDK.configureAuth(jwt: token, theme: .light, oauthCallback: callback)
+ConnectSDK.configureAuth(jwt: token, theme: .light)
 
 // Dark theme
-ConnectSDK.configureAuth(jwt: token, theme: .dark, oauthCallback: callback)
+ConnectSDK.configureAuth(jwt: token, theme: .dark)
 
 // System theme (default) — matches device settings
-ConnectSDK.configureAuth(jwt: token, theme: .system, oauthCallback: callback)
+ConnectSDK.configureAuth(jwt: token, theme: .system)
 ```
 
 ### Theme Behavior

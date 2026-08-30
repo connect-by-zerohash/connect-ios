@@ -20,7 +20,6 @@ class WebViewController: UIViewController, WKNavigationDelegate,
     private var themeEnum: Theme
     private var isInitialLoad = true
     private let allowList: ConnectAllowList
-    private let oauthCallback: ConnectOAuthCallback
 
     // Managers
     private var loadingManager: WebViewLoadingManager!
@@ -38,7 +37,7 @@ class WebViewController: UIViewController, WKNavigationDelegate,
     internal weak var session: ConnectSession?
 
     // Initializer with callback handler
-    init(urlString: String, jwt: String, environment: Environment, theme: String, callbackHandler: CallbackHandler, allowList: ConnectAllowList = .default, oauthCallback: ConnectOAuthCallback = .default) {
+    init(urlString: String, jwt: String, environment: Environment, theme: String, callbackHandler: CallbackHandler, allowList: ConnectAllowList = .default) {
         self.urlString = urlString
         self.jwt = jwt
         self.environment = environment
@@ -46,7 +45,6 @@ class WebViewController: UIViewController, WKNavigationDelegate,
         self.themeEnum = Theme(rawValue: theme) ?? .system
         self.callbackHandler = callbackHandler
         self.allowList = allowList
-        self.oauthCallback = oauthCallback
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -254,7 +252,7 @@ class WebViewController: UIViewController, WKNavigationDelegate,
     }
 
     private func setupOAuthManager() {
-        oauthManager = WebViewOAuthManager(callback: oauthCallback)
+        oauthManager = WebViewOAuthManager()
         oauthManager.delegate = self
     }
 
