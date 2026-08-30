@@ -15,16 +15,23 @@ struct SharedWebViewConfigurationTests {
         #expect(a.websiteDataStore === b.websiteDataStore)
     }
 
-    @Test("platformConfiguration installs no user scripts or message handlers")
-    func platformConfigInstallsNothing() {
+    @Test("platformConfiguration installs the execution-context setup at document start")
+    func platformConfigInstallsSetupScript() {
         let s = SharedWebViewConfiguration()
         let cfg = s.platformConfiguration()
-        // Deposit-address extraction reads the rendered DOM directly, so the
-        // shared platform config carries no injected user scripts. No script
-        // message handlers are registered either (those would be added via
-        // userContentController.add(_:name:), which platformConfiguration does
-        // not call).
-        #expect(cfg.userContentController.userScripts.isEmpty)
+        // Was `userScripts.isEmpty`. It no longer is: setup-execution-context.js
+        // suppresses Coinbase's app-upsell tray, installed here rather than per
+        // WebView so a new automation host cannot forget it (AUTH-4270).
+        //
+        // Document start is the requirement — Coinbase reads the flag while
+        // rendering, so a later write lands after the tray has painted. That timing
+        // is what this pins; the script's behaviour is covered by
+        // Tests/JSTests/Coinbase/setup-execution-context.test.mjs.
+        let scripts = cfg.userContentController.userScripts
+        #expect(scripts.count == 1)
+        #expect(scripts.first?.injectionTime == .atDocumentStart)
+        #expect(scripts.first?.isForMainFrameOnly == true)
+        #expect(scripts.first?.source.contains("appUpsellDismissed") == true)
     }
 
     @Test("dataStore is the SDK-private identifier-based store, not .default()")
