@@ -210,11 +210,23 @@ struct AuthTypesTests {
 
     @Test("DepositEvent status property") func testDepositEvent_StatusProperty() {
         let deposit = DepositEvent(
-            data: ["status": "processed"],
+            data: ["status": ["value": "processed"]],
             jsonString: "{}",
             timestamp: Date()
         )
         #expect(deposit.status == "processed")
+    }
+
+    /// `status` arrives as an object; a flat string is a different payload shape
+    /// and must not be read as one.
+    @Test("DepositEvent status ignores a flat string") func testDepositEvent_Status_IgnoresFlatString() {
+        let deposit = DepositEvent(
+            data: ["status": "processed"],
+            jsonString: "{}",
+            timestamp: Date()
+        )
+        #expect(deposit.status == nil)
+        #expect(deposit.success == false)
     }
 
     @Test("DepositEvent status missing") func testDepositEvent_Status_Missing() {
@@ -222,14 +234,64 @@ struct AuthTypesTests {
         #expect(deposit.status == nil)
     }
 
+    /// Platforms running zerohash with auto-convert succeed at `PROCESSED`.
     @Test("DepositEvent success with processed") func testDepositEvent_Success_WithProcessedStatus() {
         let deposit = MockData.depositEvent(status: "processed")
         #expect(deposit.success == true)
     }
 
+    /// The regression this guards: the web SDK shows "Deposit successful" at
+    /// `CONFIRMED` on the default path, so comparing against `processed` alone
+    /// reported a failure for every successful deposit.
+    @Test("DepositEvent success with confirmed") func testDepositEvent_Success_WithConfirmedStatus() {
+        #expect(MockData.depositEvent(status: "confirmed").success == true)
+        #expect(MockData.depositEvent(status: "CONFIRMED").success == true)
+    }
+
     @Test("DepositEvent success with pending") func testDepositEvent_Success_WithPendingStatus() {
         let deposit = MockData.depositEvent(status: "pending")
         #expect(deposit.success == false)
+    }
+
+    @Test("DepositEvent success with failed") func testDepositEvent_Success_WithFailedStatus() {
+        #expect(MockData.depositEvent(status: "FAILED").success == false)
+        #expect(MockData.depositEvent(status: "ACCOUNT_VALIDATION_FAILED").success == false)
+    }
+
+    /// Web checks account matching before the status, so a deposit still
+    /// verifying shows the verifying screen even once the status reads terminal.
+    @Test("DepositEvent success while account matching pending") func testDepositEvent_Success_WhileAccountMatchingPending() {
+        #expect(MockData.depositEvent(status: "confirmed", accountMatchingStatus: "PENDING").success == false)
+        #expect(MockData.depositEvent(status: "processed", accountMatchingStatus: "PENDING").success == false)
+    }
+
+    /// `INVALID` and `ERROR` both send web to the deposit-failed screen.
+    @Test("DepositEvent success when account matching rejects") func testDepositEvent_Success_WhenAccountMatchingRejects() {
+        #expect(MockData.depositEvent(status: "confirmed", accountMatchingStatus: "INVALID").success == false)
+        #expect(MockData.depositEvent(status: "confirmed", accountMatchingStatus: "ERROR").success == false)
+    }
+
+    /// `VALID` passes through, and so does any value we don't recognise — web
+    /// falls through to the status check rather than treating it as a failure.
+    @Test("DepositEvent success when account matching allows") func testDepositEvent_Success_WhenAccountMatchingAllows() {
+        #expect(MockData.depositEvent(status: "confirmed", accountMatchingStatus: "VALID").success == true)
+        #expect(MockData.depositEvent(status: "confirmed", accountMatchingStatus: "SKIPPED").success == true)
+    }
+
+    @Test("DepositEvent account matching fields") func testDepositEvent_AccountMatchingFields() {
+        let deposit = MockData.depositEvent(
+            status: "confirmed",
+            accountMatchingStatus: "INVALID",
+            accountMatchingReason: "name mismatch"
+        )
+        #expect(deposit.accountMatchingStatus == "INVALID")
+        #expect(deposit.accountMatchingReason == "name mismatch")
+    }
+
+    @Test("DepositEvent account matching missing") func testDepositEvent_AccountMatching_Missing() {
+        let deposit = MockData.emptyDepositEvent
+        #expect(deposit.accountMatchingStatus == nil)
+        #expect(deposit.accountMatchingReason == nil)
     }
 
     @Test("DepositEvent success with missing status") func testDepositEvent_Success_WithMissingStatus() {

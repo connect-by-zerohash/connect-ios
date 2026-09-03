@@ -95,6 +95,10 @@ public struct ErrorEvent {
 }
 
 /// Deposit event wrapper (auth-specific)
+///
+/// **Not terminal.** It also fires while account matching is verifying, and can
+/// arrive more than once for the same deposit — read the outcome off `status` /
+/// `success` rather than treating the call itself as completion.
 public struct DepositEvent {
     /// Raw JSON data from webview
     public let data: [String: Any]
@@ -120,9 +124,43 @@ public struct DepositEvent {
         return (data["status"] as? [String: Any])?["value"] as? String
     }
 
-    /// Returns true if the deposit is successful, otherwise returns false
+    /// Status values the Auth flow treats as a successful deposit.
+    ///
+    /// The web SDK's `isSuccessfulDeposit` shows success at `CONFIRMED` — its
+    /// `DepositStatusValue.COMPLETED` is the string `'CONFIRMED'` — or at
+    /// `PROCESSED` when the platform runs zerohash with auto-convert. That
+    /// profile flag never reaches the bridge, so both are accepted here.
+    /// Comparing against `processed` alone reported `false` for every successful
+    /// deposit on the default path, the same bug `WithdrawalEvent` already
+    /// carries a fix for.
+    private static let successStatuses: Set<String> = ["confirmed", "processed"]
+
+    /// Account-matching states the web SDK routes away from success before it
+    /// ever looks at the status: `PENDING` shows the verifying screen, `INVALID`
+    /// and `ERROR` show the failed screen. Absent, `VALID`, or any value we
+    /// don't know yet falls through to the status check, exactly as the web hook
+    /// does.
+    private static let nonSuccessMatchingStatuses: Set<String> = ["pending", "invalid", "error"]
+
+    /// Returns true if the deposit reached a successful terminal state.
     public var success: Bool {
-        return status?.lowercased() == "processed"
+        guard let value = status?.lowercased(), Self.successStatuses.contains(value) else {
+            return false
+        }
+        guard let matching = accountMatchingStatus?.lowercased() else { return true }
+        return !Self.nonSuccessMatchingStatuses.contains(matching)
+    }
+
+    /// Account-matching validation status, e.g. `PENDING`, `VALID`, `INVALID`, `ERROR`.
+    public var accountMatchingStatus: String? {
+        return (data["accountMatchingValidation"] as? [String: Any])?["status"] as? String
+    }
+
+    /// Why account matching failed. On a name mismatch this is the only
+    /// explanation available anywhere in the stack, so prefer it over reporting
+    /// a bare id.
+    public var accountMatchingReason: String? {
+        return (data["accountMatchingValidation"] as? [String: Any])?["reason"] as? String
     }
 
     /// Asset ticker (btc, eth, usdc, etc.)

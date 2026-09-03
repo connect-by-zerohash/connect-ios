@@ -407,16 +407,26 @@ See all callback payloads in the
 
 Called when a deposit event occurs during the Auth flow.
 
+`onDeposit` is a **status, not an outcome**. It also fires while account matching
+is verifying, and can arrive more than once for the same deposit, so read the
+outcome off `success` rather than treating the call itself as completion.
+
 ```swift
-deposit.depositId    // String? - Unique deposit identifier
-deposit.status       // String? - Current deposit status
-deposit.success      // Bool   - True when status.value == "processed"
-deposit.assetId      // String? - Asset ticker (BTC, ETH, USDC, etc.)
-deposit.networkId    // String? - Network/chain used
-deposit.amount       // String? - Amount deposited
-deposit.data         // [String: Any] - Raw event data
-deposit.jsonString   // String - Raw JSON string
+deposit.depositId              // String? - Unique deposit identifier
+deposit.status                 // String? - "CONFIRMED", "PROCESSED", "PENDING", "FAILED", ...
+deposit.success                // Bool   - True at "CONFIRMED" or "PROCESSED", unless
+                               //          account matching is PENDING/INVALID/ERROR
+deposit.assetId                // String? - Asset ticker (BTC, ETH, USDC, etc.)
+deposit.networkId              // String? - Network/chain used
+deposit.amount                 // String? - Amount deposited
+deposit.accountMatchingStatus  // String? - "PENDING", "VALID", "INVALID", "ERROR"
+deposit.accountMatchingReason  // String? - Why account matching failed
+deposit.data                   // [String: Any] - Raw event data
+deposit.jsonString             // String - Raw JSON string
 ```
+
+A successful deposit reports `CONFIRMED` on most platforms and `PROCESSED` on
+platforms running zerohash with auto-convert; both count as success.
 
 ### onWithdrawal (Recovery and Withdrawal)
 
@@ -425,7 +435,7 @@ Called when a withdrawal event occurs during the Recovery or Withdrawal flow.
 ```swift
 withdrawal.withdrawalId  // String? - Unique withdrawal identifier
 withdrawal.status        // String? - Current withdrawal status
-withdrawal.success       // Bool   - True when status.value == "processed"
+withdrawal.success       // Bool   - True at "CONFIRMED" or "PROCESSED"
 withdrawal.assetId       // String? - Asset ticker (BTC, ETH, USDC, etc.)
 withdrawal.networkId     // String? - Network/chain used
 withdrawal.amount        // String? - Amount withdrawn

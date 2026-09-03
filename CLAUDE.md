@@ -115,7 +115,9 @@ Tests/ConnectSDKTests/  # Unit tests with mocks
 ### Event Callbacks
 - **AuthCallbacks**: Typed struct with optional closures for each event type
 - **Event Wrappers**: `ErrorEvent`, `GenericEvent`, `DepositEvent` parse raw JSON into typed objects
-- **DepositEvent.success**: Checks if `status.value == "processed"`
+- **DepositEvent.success**: `status.value` is `CONFIRMED` or `PROCESSED` (the web
+  SDK succeeds at `CONFIRMED`, or at `PROCESSED` on zerohash-with-auto-convert
+  platforms), and account matching is not `PENDING`/`INVALID`/`ERROR`
 - All callbacks receive raw JSON string for debugging/forwarding
 
 ## Important Patterns

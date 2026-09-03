@@ -5,6 +5,26 @@ All notable changes to ConnectSDK for iOS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.3.0] – 2026-09-03
+
+### Fixed
+- `DepositEvent.success` reported `false` for every successful deposit on
+  platforms not running zerohash with auto-convert. The web SDK shows its
+  success screen at `CONFIRMED` (its `DepositStatusValue.COMPLETED` is the
+  string `'CONFIRMED'`), and only at `PROCESSED` when auto-convert is on. That
+  profile flag never reaches the bridge, so both statuses now count as success —
+  the same fix `WithdrawalEvent` already carried. `success` now also honours the
+  account-matching validation the web flow checks first, so `PENDING`
+  (verifying), `INVALID` and `ERROR` no longer report success (AUTH-4336).
+
+### Added
+- `DepositEvent.accountMatchingStatus` and `DepositEvent.accountMatchingReason`,
+  so a host seeing `success == false` can tell a deposit that is still verifying
+  from a name mismatch. On a mismatch that reason is the only explanation
+  available anywhere in the stack.
+
 ## [1.2.0] – 2026-08-29
 
 OAuth returns to a `connectsdk-oauth://callback` custom scheme again, matching

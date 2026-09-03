@@ -64,16 +64,23 @@ enum MockData {
         assetId: String = "BTC",
         networkId: String = "bitcoin",
         amount: String = "0.5",
+        accountMatchingStatus: String? = nil,
+        accountMatchingReason: String? = nil,
         jsonString: String = "{}",
         timestamp: Date = Date()
     ) -> DepositEvent {
-        let data: [String: Any] = [
+        var data: [String: Any] = [
             "depositId": depositId,
             "status": ["value": status],
             "assetId": assetId,
             "networkId": networkId,
             "amount": amount
         ]
+        if let accountMatchingStatus {
+            var validation: [String: Any] = ["status": accountMatchingStatus]
+            if let accountMatchingReason { validation["reason"] = accountMatchingReason }
+            data["accountMatchingValidation"] = validation
+        }
         return DepositEvent(
             data: data,
             jsonString: jsonString,
