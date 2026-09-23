@@ -75,6 +75,15 @@ struct OverlayOptionsTests {
         #expect(resolved.colors == Brand.connect.theme.colors)
     }
 
+    @Test("branding: secured-connect resolves the connect palette with the wordmark lockup")
+    func brandingSecuredConnect() {
+        let resolved = OverlayOptions(resolving: .init(branding: "secured-connect"))
+        #expect(resolved.brand == .securedConnect)
+        // Same palette as `.connect`; the two lockups differ in the footer
+        // mark + prefix, not in the dot colors.
+        #expect(resolved.colors == Brand.connect.theme.colors)
+    }
+
     @Test("absent branding falls back to the default brand (connect)")
     func brandingAbsentFallsBack() {
         let resolved = OverlayOptions(resolving: .init(branding: nil))
